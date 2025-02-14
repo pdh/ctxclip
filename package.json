@@ -1,0 +1,35 @@
+{
+  "name": "code-context-extractor",
+  "displayName": "Code Context Extractor",
+  "description": "Extract relevant code context from selections",
+  "version": "0.1.0",
+  "engines": {
+    "vscode": "^1.60.0"
+  },
+  "categories": [
+    "Other"
+  ],
+  "activationEvents": [],
+  "contributes": {
+    "commands": [
+      {
+        "command": "contextExtractor.getContext",
+        "title": "Extract Code Context"
+      },
+      {
+        "command": "contextExtractor.setDepth",
+        "title": "Set Context Extraction Depth"
+      }
+    ],
+    "configuration": {
+      "title": "Context Extractor",
+      "properties": {
+        "contextExtractor.depth": {
+          "type": "number",
+          "default": 2,
+          "description": "Depth of context extraction"
+        }
+      }
+    }
+  }
+}

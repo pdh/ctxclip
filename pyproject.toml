@@ -1,0 +1,10 @@
+[project]
+name = "ctxclip"
+description = "experimental python code context clipping"
+version = "0.0.1"
+
+[build-system]
+build-backend = 'setuptools.build_meta'
+requires = [
+    'setuptools', 'wheel'
+]
