@@ -8,12 +8,23 @@ logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
 
 
+class FileNotInProjectError(Exception):
+    """Raised when a file is not found in the project"""
+
+    pass
+
+
 @dataclass
 class CodeSelection:
     text: str
     file_path: Path
     start_line: int
     end_line: int
+
+    def __post_init__(self):
+        if isinstance(self.file_path, str):
+            self.file_path = Path(self.file_path)
+        self.file_path = self.file_path.resolve()
 
 
 @dataclass
@@ -26,11 +37,9 @@ class FunctionInfo:
 class ProjectContextExtractor:
     def __init__(self, project_root: Path):
         self.project_root = Path(project_root).resolve()
-        self.function_map: Dict[Tuple[str, str], FunctionInfo] = (
-            {}
-        )  # (module_name, func_name) -> FunctionInfo
-        self.module_map: Dict[Path, str] = {}  # file_path -> source_code
-        self.import_map: Dict[str, Set[str]] = {}  # module_name -> imported_names
+        self.function_map: Dict[Tuple[str, str], FunctionInfo] = {}
+        self.module_map: Dict[Path, str] = {}
+        self.import_map: Dict[str, Set[str]] = {}
         self._build_project_maps()
 
     def _is_python_file(self, path: Path) -> bool:
@@ -38,8 +47,18 @@ class ProjectContextExtractor:
 
     def _get_module_name(self, file_path: Path) -> str:
         """Convert file path to module name relative to project root"""
-        rel_path = file_path.relative_to(self.project_root)
-        return str(rel_path.with_suffix("")).replace("/", ".")
+        try:
+            # Ensure both paths are absolute and resolved
+            abs_file_path = Path(file_path).resolve()
+            abs_project_root = Path(self.project_root).resolve()
+
+            # Get relative path safely
+            rel_path = abs_file_path.relative_to(abs_project_root)
+            return str(rel_path.with_suffix("")).replace("/", ".").replace("\\", ".")
+        except ValueError as e:
+            logger.error(f"Error getting module name for {file_path}: {e}")
+            # Return a basic module name if we can't get the relative path
+            return file_path.stem
 
     def _build_project_maps(self):
         """Scan project directory and build maps of functions and imports"""
@@ -79,10 +98,22 @@ class ProjectContextExtractor:
         except SyntaxError as e:
             logger.error(f"Syntax error in {file_path}: {e}")
 
-    def _get_function_calls(self, node) -> Set[Tuple[Optional[str], str]]:
-        """Extract function calls from an AST node, returning (module_name, func_name) tuples"""
+    def _get_function_calls(
+        self, node, only_direct: bool = False
+    ) -> Set[Tuple[Optional[str], str]]:
+        """
+        Extract function calls from an AST node, returning (module_name, func_name) tuples
+
+        Args:
+            node: The AST node to analyze
+            only_direct: If True, only return direct calls from the node (not from nested functions)
+        """
         calls = set()
         for child in ast.walk(node):
+            # Skip nested function definitions if only_direct is True
+            if only_direct and isinstance(child, ast.FunctionDef):
+                continue
+
             if isinstance(child, ast.Call):
                 if isinstance(child.func, ast.Name):
                     # Direct function call
@@ -93,11 +124,27 @@ class ProjectContextExtractor:
                         calls.add((child.func.value.id, child.func.attr))
         return calls
 
-    def _get_function_text(self, func_info: FunctionInfo) -> str:
-        """Extract the source text for a function"""
+    def _get_function_text(
+        self, func_info: FunctionInfo, include_body: bool = True
+    ) -> str:
+        """
+        Extract the source text for a function
+
+        Args:
+            func_info: FunctionInfo object containing function details
+            include_body: If True, include the full function body; if False, only include the signature
+        """
         source_code = self.module_map[func_info.file_path]
         lines = source_code.splitlines()
-        return "\n".join(lines[func_info.node.lineno - 1 : func_info.node.end_lineno])
+
+        if include_body:
+            return "\n".join(
+                lines[func_info.node.lineno - 1 : func_info.node.end_lineno]
+            )
+        else:
+            # Only return the function signature
+            signature_line = lines[func_info.node.lineno - 1]
+            return f"{signature_line}\n    ..."
 
     def _resolve_function_call(
         self, module_name: str, call: Tuple[Optional[str], str]
@@ -139,6 +186,12 @@ class ProjectContextExtractor:
 
     def get_context(self, selection: CodeSelection, depth: int = 1) -> str:
         """Get code context including related functions up to specified depth"""
+        # Verify the file exists and is in our module map
+        if not selection.file_path.exists():
+            raise FileNotInProjectError(f"File not found: {selection.file_path}")
+        
+        if selection.file_path.resolve() not in self.module_map:
+            raise FileNotInProjectError(f"File not in project: {selection.file_path}")
         context_parts = [selection.text]
         processed_funcs = set()
 
@@ -149,10 +202,13 @@ class ProjectContextExtractor:
         selection_node = ast.parse(selection.text)
         current_calls = self._get_function_calls(selection_node)
 
+        # Keep track of calls at each depth level
+        calls_by_depth = {0: current_calls}
+
         # Process each depth level
         for current_depth in range(depth):
             new_calls = set()
-            for call in current_calls:
+            for call in calls_by_depth[current_depth]:
                 func_info = self._resolve_function_call(module_name, call)
                 if (
                     not func_info
@@ -162,14 +218,21 @@ class ProjectContextExtractor:
 
                 # Add function definition to context
                 context_parts.append(f"# From {func_info.file_path}")
-                context_parts.append(self._get_function_text(func_info))
+                # Include full body for all functions within depth
+                context_parts.append(
+                    self._get_function_text(func_info, include_body=True)
+                )
                 processed_funcs.add((func_info.module_name, func_info.node.name))
 
                 # Get next level of function calls
-                new_calls.update(self._get_function_calls(func_info.node))
+                func_calls = self._get_function_calls(func_info.node)
+                if (
+                    current_depth < depth - 1
+                ):  # Only store calls if we haven't reached max depth
+                    new_calls.update(func_calls)
 
-            current_calls = new_calls
-            if not current_calls:
+            calls_by_depth[current_depth + 1] = new_calls
+            if not new_calls:
                 break
 
         return "\n\n".join(context_parts)

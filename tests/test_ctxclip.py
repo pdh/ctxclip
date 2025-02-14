@@ -72,7 +72,7 @@ class TestProjectContextExtractor:
 
         assert "def helper_function():" in context
         assert (
-            "internal_helper" not in context
+            "def internal_helper():" not in context
         )  # depth 1 shouldn't include internal_helper
 
     def test_deep_resolution(self, temp_project):
