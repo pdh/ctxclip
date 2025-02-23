@@ -183,53 +183,54 @@ class ProjectContextExtractor:
                     return self.function_map[key]
 
         return None
-
+    
     def get_context(self, selection: CodeSelection, depth: int = 1) -> str:
         """Get code context including related functions up to specified depth"""
-        # Verify the file exists and is in our module map
         if not selection.file_path.exists():
             raise FileNotInProjectError(f"File not found: {selection.file_path}")
-        
+
         if selection.file_path.resolve() not in self.module_map:
             raise FileNotInProjectError(f"File not in project: {selection.file_path}")
-        context_parts = [selection.text]
-        processed_funcs = set()
 
-        # Get module name for the selection
+        # Get the full source code and extract the selection text from line range
+        source_lines = self.module_map[selection.file_path].splitlines()
+        selection.text = "\n".join(source_lines[selection.start_line - 1:selection.end_line])
+
+        # Create a valid Python block for parsing by finding the base indentation
+        # and dedenting the code to make it valid at module level
+        lines = selection.text.splitlines()
+        if lines:
+            base_indent = len(lines[0]) - len(lines[0].lstrip())
+            dedented_lines = [line[base_indent:] if line.startswith(" " * base_indent) else line for line in lines]
+            selection.text = "\n".join(dedented_lines)
+
+        context_parts = ["\n".join(source_lines[selection.start_line - 1:selection.end_line])]
+        processed_funcs = set()
         module_name = self._get_module_name(selection.file_path)
 
-        # Get initial function calls from selection
-        selection_node = ast.parse(selection.text)
-        current_calls = self._get_function_calls(selection_node)
+        try:
+            # Parse the dedented selection for analysis
+            selection_node = ast.parse(selection.text)
+            current_calls = self._get_function_calls(selection_node)
+        except SyntaxError as e:
+            logger.warning(f"Could not parse selection: {e}. Continuing with function analysis.")
+            current_calls = set()
 
-        # Keep track of calls at each depth level
+        # Rest of the function remains the same
         calls_by_depth = {0: current_calls}
-
-        # Process each depth level
         for current_depth in range(depth):
             new_calls = set()
             for call in calls_by_depth[current_depth]:
                 func_info = self._resolve_function_call(module_name, call)
-                if (
-                    not func_info
-                    or (func_info.module_name, func_info.node.name) in processed_funcs
-                ):
+                if not func_info or (func_info.module_name, func_info.node.name) in processed_funcs:
                     continue
 
-                # Add function definition to context
                 context_parts.append(f"# From {func_info.file_path}")
-                # Include full body for all functions within depth
-                context_parts.append(
-                    self._get_function_text(func_info, include_body=True)
-                )
+                context_parts.append(self._get_function_text(func_info, include_body=True))
                 processed_funcs.add((func_info.module_name, func_info.node.name))
 
-                # Get next level of function calls
-                func_calls = self._get_function_calls(func_info.node)
-                if (
-                    current_depth < depth - 1
-                ):  # Only store calls if we haven't reached max depth
-                    new_calls.update(func_calls)
+                if current_depth < depth - 1:
+                    new_calls.update(self._get_function_calls(func_info.node))
 
             calls_by_depth[current_depth + 1] = new_calls
             if not new_calls:
@@ -237,15 +238,14 @@ class ProjectContextExtractor:
 
         return "\n\n".join(context_parts)
 
-
 # Example usage
 if __name__ == "__main__":
-    project_root = Path("./my_project")
+    project_root = Path(".")
     selection = CodeSelection(
-        text="result = my_function()",
+        text="",
         file_path=project_root / "main.py",
-        start_line=10,
-        end_line=10,
+        start_line=186,
+        end_line=239,
     )
 
     extractor = ProjectContextExtractor(project_root)
