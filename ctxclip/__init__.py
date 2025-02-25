@@ -1,3 +1,2 @@
-from ctxclip.main import ProjectContextExtractor, CodeSelection
+from ctxclip.main import *
 
-__all__ = [ProjectContextExtractor, CodeSelection]

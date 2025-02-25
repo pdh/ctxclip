@@ -1,276 +1,479 @@
 import ast
+import os
+import re
+import argparse
 from dataclasses import dataclass
-from pathlib import Path
-from typing import Set, Dict, Optional, Tuple
-import logging
-
-logging.basicConfig(level=logging.INFO)
-logger = logging.getLogger(__name__)
-
-
-class FileNotInProjectError(Exception):
-    """Raised when a file is not found in the project"""
-
-    pass
+from typing import Dict, List, Set, Tuple
 
 
 @dataclass
-class CodeSelection:
-    text: str
-    file_path: Path
-    start_line: int
-    end_line: int
-
-    def __post_init__(self):
-        if isinstance(self.file_path, str):
-            self.file_path = Path(self.file_path)
-        self.file_path = self.file_path.resolve()
+class CodeContext:
+    name: str
+    type: str  # 'function', 'class', 'variable'
+    source: str
+    line_start: int
+    line_end: int
+    depth: int = 0  # Recursion depth in the reference chain
 
 
-@dataclass
-class FunctionInfo:
-    node: ast.FunctionDef
-    file_path: Path
-    module_name: str
+def parse_file(file_path: str) -> Tuple[ast.Module, List[str]]:
+    """Parse a Python file and return its AST and source lines."""
+    with open(file_path, "r") as f:
+        source = f.read()
+        lines = source.splitlines()
+    return ast.parse(source), lines
 
 
-class ProjectContextExtractor:
-    def __init__(self, project_root: Path):
-        self.project_root = Path(project_root).resolve()
-        self.function_map: Dict[Tuple[str, str], FunctionInfo] = {}
-        self.module_map: Dict[Path, str] = {}
-        self.import_map: Dict[str, Set[str]] = {}
-        self._build_project_maps()
+def get_source_segment(node: ast.AST, lines: List[str]) -> str:
+    """Extract source code for a given AST node."""
+    if hasattr(node, "lineno") and hasattr(node, "end_lineno"):
+        return "\n".join(lines[node.lineno - 1 : node.end_lineno])
+    return ""
 
-    def _is_python_file(self, path: Path) -> bool:
-        return path.is_file() and path.suffix == ".py"
 
-    def _get_module_name(self, file_path: Path) -> str:
-        """Convert file path to module name relative to project root"""
-        try:
-            # Ensure both paths are absolute and resolved
-            abs_file_path = Path(file_path).resolve()
-            abs_project_root = Path(self.project_root).resolve()
+class DefinitionCollector(ast.NodeVisitor):
+    """Collect all definitions (functions, classes, variables) in a file."""
 
-            # Get relative path safely
-            rel_path = abs_file_path.relative_to(abs_project_root)
-            return str(rel_path.with_suffix("")).replace("/", ".").replace("\\", ".")
-        except ValueError as e:
-            logger.error(f"Error getting module name for {file_path}: {e}")
-            # Return a basic module name if we can't get the relative path
-            return file_path.stem
+    def __init__(
+        self,
+        lines,
+        include_functions=True,
+        include_classes=True,
+        include_variables=True,
+        name_pattern=None,
+    ):
+        self.definitions: Dict[str, CodeContext] = {}
+        self.lines = lines
+        self.include_functions = include_functions
+        self.include_classes = include_classes
+        self.include_variables = include_variables
+        self.name_pattern = name_pattern
+        self.name_regex = re.compile(name_pattern) if name_pattern else None
 
-    def _build_project_maps(self):
-        """Scan project directory and build maps of functions and imports"""
-        for file_path in self.project_root.rglob("*.py"):
-            if "__pycache__" in str(file_path):
-                continue
+    def visit_FunctionDef(self, node: ast.FunctionDef):
+        if self.include_functions:
+            # Skip if name doesn't match pattern
+            if self.name_regex and not self.name_regex.match(node.name):
+                self.generic_visit(node)
+                return
 
-            try:
-                with open(file_path, "r") as f:
-                    source_code = f.read()
-                self.module_map[file_path] = source_code
+            self.definitions[node.name] = CodeContext(
+                name=node.name,
+                type="function",
+                source=get_source_segment(node, self.lines),
+                line_start=node.lineno,
+                line_end=node.end_lineno,
+            )
+        self.generic_visit(node)
 
-                module_name = self._get_module_name(file_path)
-                self._process_file(file_path, source_code, module_name)
-                logger.info(f"Processed {file_path}")
-            except Exception as e:
-                logger.error(f"Error processing {file_path}: {e}")
+    def visit_ClassDef(self, node: ast.ClassDef):
+        if self.include_classes:
+            # Skip if name doesn't match pattern
+            if self.name_regex and not self.name_regex.match(node.name):
+                self.generic_visit(node)
+                return
 
-    def _process_file(self, file_path: Path, source_code: str, module_name: str):
-        """Process a single Python file to extract functions and imports"""
-        try:
-            tree = ast.parse(source_code)
+            self.definitions[node.name] = CodeContext(
+                name=node.name,
+                type="class",
+                source=get_source_segment(node, self.lines),
+                line_start=node.lineno,
+                line_end=node.end_lineno,
+            )
+        self.generic_visit(node)
 
-            # Process imports
-            self.import_map[module_name] = set()
-            for node in ast.walk(tree):
-                if isinstance(node, ast.Import):
-                    for name in node.names:
-                        self.import_map[module_name].add(name.name)
-                elif isinstance(node, ast.ImportFrom):
-                    if node.module:
-                        self.import_map[module_name].add(node.module)
-                elif isinstance(node, ast.FunctionDef):
-                    self.function_map[(module_name, node.name)] = FunctionInfo(
-                        node=node, file_path=file_path, module_name=module_name
+    def visit_Assign(self, node: ast.Assign):
+        if self.include_variables:
+            for target in node.targets:
+                if isinstance(target, ast.Name):
+                    # Skip if name doesn't match pattern
+                    if self.name_regex and not self.name_regex.match(target.id):
+                        continue
+
+                    self.definitions[target.id] = CodeContext(
+                        name=target.id,
+                        type="variable",
+                        source=get_source_segment(node, self.lines),
+                        line_start=node.lineno,
+                        line_end=node.end_lineno,
                     )
-        except SyntaxError as e:
-            logger.error(f"Syntax error in {file_path}: {e}")
+        self.generic_visit(node)
 
-    def _get_function_calls(
-        self, node, only_direct: bool = False
-    ) -> Set[Tuple[Optional[str], str]]:
-        """
-        Extract function calls from an AST node, returning (module_name, func_name) tuples
 
-        Args:
-            node: The AST node to analyze
-            only_direct: If True, only return direct calls from the node (not from nested functions)
-        """
-        calls = set()
-        for child in ast.walk(node):
-            # Skip nested function definitions if only_direct is True
-            if only_direct and isinstance(child, ast.FunctionDef):
-                continue
+class ReferenceExtractor(ast.NodeVisitor):
+    """Extract all names referenced in a code snippet."""
 
-            if isinstance(child, ast.Call):
-                if isinstance(child.func, ast.Name):
-                    # Direct function call
-                    calls.add((None, child.func.id))
-                elif isinstance(child.func, ast.Attribute):
-                    # Module.function() call
-                    if isinstance(child.func.value, ast.Name):
-                        calls.add((child.func.value.id, child.func.attr))
-        return calls
+    def __init__(self):
+        self.references: Set[str] = set()
+        self.defined_names: Set[str] = set()  # Track defined names
 
-    def _get_function_text(
-        self, func_info: FunctionInfo, include_body: bool = True
-    ) -> str:
-        """
-        Extract the source text for a function
+    def visit_Name(self, node: ast.Name):
+        if isinstance(node.ctx, ast.Store):
+            # Track names being defined
+            self.defined_names.add(node.id)
+        elif isinstance(node.ctx, ast.Load):
+            # Only add references if they're not defined in this scope
+            if node.id not in self.defined_names:
+                self.references.add(node.id)
+        self.generic_visit(node)
 
-        Args:
-            func_info: FunctionInfo object containing function details
-            include_body: If True, include the full function body; if False, only include the signature
-        """
-        source_code = self.module_map[func_info.file_path]
-        lines = source_code.splitlines()
+    def visit_Assign(self, node: ast.Assign):
+        # Process the right side first to capture references
+        self.visit(node.value)
+        # Then process targets (which will be stored in defined_names)
+        for target in node.targets:
+            self.visit(target)
 
-        if include_body:
-            return "\n".join(
-                lines[func_info.node.lineno - 1 : func_info.node.end_lineno]
-            )
-        else:
-            # Only return the function signature
-            signature_line = lines[func_info.node.lineno - 1]
-            return f"{signature_line}\n    ..."
 
-    def _resolve_function_call(
-        self, module_name: str, call: Tuple[Optional[str], str]
-    ) -> Optional[FunctionInfo]:
-        """Resolve a function call to its FunctionInfo, handling imports"""
-        call_module, func_name = call
+def find_package_files(directory: str) -> List[str]:
+    """Find all Python files in the package."""
+    python_files = []
+    for root, _, files in os.walk(directory):
+        for file in files:
+            if file.endswith(".py"):
+                python_files.append(os.path.join(root, file))
+    return python_files
 
-        # Try direct module.function reference
-        if call_module:
-            key = (call_module, func_name)
-            if key in self.function_map:
-                return self.function_map[key]
 
-            # Check if the module was imported in the current module
-            if (
-                module_name in self.import_map
-                and call_module in self.import_map[module_name]
-            ):
-                # Search for the function in imported module
-                for potential_key in self.function_map:
-                    if potential_key[1] == func_name and potential_key[0].endswith(
-                        call_module
-                    ):
-                        return self.function_map[potential_key]
+def collect_all_definitions(
+    package_dir: str,
+    include_functions=True,
+    include_classes=True,
+    include_variables=True,
+) -> Dict[str, CodeContext]:
+    """Collect all definitions from all Python files in the package."""
+    package_files = find_package_files(package_dir)
+    all_definitions: Dict[str, CodeContext] = {}
 
-        # Try local function
-        local_key = (module_name, func_name)
-        if local_key in self.function_map:
-            return self.function_map[local_key]
-
-        # Try searching in imported modules
-        if module_name in self.import_map:
-            for imported_module in self.import_map[module_name]:
-                key = (imported_module, func_name)
-                if key in self.function_map:
-                    return self.function_map[key]
-
-        return None
-
-    def get_context(self, selection: CodeSelection, depth: int = 1) -> str:
-        """Get code context including related functions up to specified depth"""
-        if not selection.file_path.exists():
-            raise FileNotInProjectError(f"File not found: {selection.file_path}")
-
-        if selection.file_path.resolve() not in self.module_map:
-            raise FileNotInProjectError(f"File not in project: {selection.file_path}")
-
-        # Get the full source code and extract the selection text from line range
-        source_lines = self.module_map[selection.file_path].splitlines()
-        selection.text = "\n".join(
-            source_lines[selection.start_line - 1 : selection.end_line]
+    for py_file in package_files:
+        file_tree, file_lines = parse_file(py_file)
+        def_collector = DefinitionCollector(
+            file_lines,
+            include_functions=include_functions,
+            include_classes=include_classes,
+            include_variables=include_variables,
         )
+        def_collector.visit(file_tree)
 
-        # Create a valid Python block for parsing by finding the base indentation
-        # and dedenting the code to make it valid at module level
-        lines = selection.text.splitlines()
-        if lines:
-            base_indent = len(lines[0]) - len(lines[0].lstrip())
-            dedented_lines = [
-                line[base_indent:] if line.startswith(" " * base_indent) else line
-                for line in lines
-            ]
-            selection.text = "\n".join(dedented_lines)
+        # Add file path information to each definition
+        for name, context in def_collector.definitions.items():
+            if name not in all_definitions:
+                context.source = f"# From {py_file}\n{context.source}"
+                all_definitions[name] = context
 
-        context_parts = [
-            "\n".join(source_lines[selection.start_line - 1 : selection.end_line])
-        ]
-        processed_funcs = set()
-        module_name = self._get_module_name(selection.file_path)
+    return all_definitions
+
+
+def extract_references_from_code(code_context: CodeContext) -> Set[str]:
+    """Extract all references from a code context."""
+    try:
+        tree = ast.parse(code_context.source)
+        extractor = ReferenceExtractor()
+        extractor.visit(tree)
+        return extractor.references
+    except SyntaxError:
+        # Handle potential syntax errors in the extracted code
+        return set()
+
+
+def expand_context_recursive(
+    selected_text_references: Set[str],
+    all_definitions: Dict[str, CodeContext],
+    max_depth: int,
+) -> Dict[str, CodeContext]:
+    """
+    Recursively expand context for references up to max_depth.
+
+    Args:
+        selected_text_references: References found in the selected text
+        all_definitions: All definitions found in the package
+        max_depth: Maximum recursion depth
+
+    Returns:
+        Dictionary of expanded contexts with their recursion depth
+    """
+    result: Dict[str, CodeContext] = {}
+
+    def process_level(references: Set[str], current_depth: int):
+        if current_depth > max_depth:
+            return
+
+        next_level_refs = set()
+
+        for ref in references:
+            if ref in all_definitions and ref not in result:
+                # Add this definition to our results
+                context = all_definitions[ref]
+                context.depth = current_depth
+                result[ref] = context
+
+                # Extract references from this definition for the next level
+                if current_depth < max_depth:
+                    refs_in_def = extract_references_from_code(context)
+                    next_level_refs.update(refs_in_def)
+
+        # Process the next level if we have references and haven't reached max depth
+        if next_level_refs and current_depth < max_depth:
+            process_level(next_level_refs, current_depth + 1)
+
+    # Start with depth 1 for direct references in the selected text
+    process_level(selected_text_references, 1)
+    return result
+
+
+def extract_references_from_range(file_path, start_line, end_line):
+    """Extract all references from the selected text range."""
+    with open(file_path, "r") as f:
+        lines = f.readlines()
+
+    # Extract the lines and preserve their exact content
+    selected_lines = lines[start_line - 1 : end_line]
+    selected_text = "".join(
+        selected_lines
+    )  # Use join instead of '\n'.join to preserve exact formatting
+
+    try:
+        # Try to parse the selected text
+        selected_tree = ast.parse(selected_text)
+        extractor = ReferenceExtractor()
+        extractor.visit(selected_tree)
+        return extractor.references
+    except SyntaxError:
+        # If that fails, try to dedent the code before parsing
+        import textwrap
 
         try:
-            # Parse the dedented selection for analysis
-            selection_node = ast.parse(selection.text)
-            current_calls = self._get_function_calls(selection_node)
-        except SyntaxError as e:
-            logger.warning(
-                f"Could not parse selection: {e}. Continuing with function analysis."
+            dedented_text = textwrap.dedent(selected_text)
+            selected_tree = ast.parse(dedented_text)
+            extractor = ReferenceExtractor()
+            extractor.visit(selected_tree)
+            return extractor.references
+        except SyntaxError:
+            # If that still fails, fall back to line-by-line parsing
+            print(
+                "Warning: Syntax error in selected text. Falling back to line-by-line parsing."
             )
-            current_calls = set()
-
-        # Rest of the function remains the same
-        calls_by_depth = {0: current_calls}
-        for current_depth in range(depth):
-            new_calls = set()
-            for call in calls_by_depth[current_depth]:
-                func_info = self._resolve_function_call(module_name, call)
-                if (
-                    not func_info
-                    or (func_info.module_name, func_info.node.name) in processed_funcs
-                ):
+            references = set()
+            for i in range(start_line - 1, end_line):
+                line = lines[i].strip()  # Strip whitespace to handle indentation
+                if not line:  # Skip empty lines
                     continue
+                try:
+                    line_tree = ast.parse(line)
+                    extractor = ReferenceExtractor()
+                    extractor.visit(line_tree)
+                    references.update(extractor.references)
+                except SyntaxError:
+                    continue
+            return references
 
-                context_parts.append(f"# From {func_info.file_path}")
-                context_parts.append(
-                    self._get_function_text(func_info, include_body=True)
-                )
-                processed_funcs.add((func_info.module_name, func_info.node.name))
 
-                if current_depth < depth - 1:
-                    new_calls.update(self._get_function_calls(func_info.node))
+def expand_context(
+    file_path: str,
+    start_line: int,
+    end_line: int,
+    max_depth: int = 2,
+    include_functions=True,
+    include_classes=True,
+    include_variables=True,
+) -> Dict[str, CodeContext]:
+    """Expand context for references in the selected text range."""
+    # Extract references from the selected range
+    selected_refs = extract_references_from_range(file_path, start_line, end_line)
 
-            calls_by_depth[current_depth + 1] = new_calls
-            if not new_calls:
-                break
+    # Collect all definitions from the package
+    package_dir = os.path.dirname(file_path)
+    all_definitions = collect_all_definitions(
+        package_dir,
+        include_functions=include_functions,
+        include_classes=include_classes,
+        include_variables=include_variables,
+    )
 
-        return "\n\n".join(context_parts)
+    # Recursively expand context
+    return expand_context_recursive(selected_refs, all_definitions, max_depth)
 
 
 def main():
-    import argparse
-    parser = argparse.ArgumentParser()
-    parser.add_argument("-f", "--filepath", type=str)
-    parser.add_argument("-r", "--root", type=str)
-    parser.add_argument("-s", "--start", type=int)
-    parser.add_argument("-e", "--end", type=int)
-    parser.add_argument("-d", "--depth", type=int, default=1)
-    args = parser.parse_args()
-    selection = CodeSelection(
-        text="",
-        file_path=args.filepath,
-        start_line=args.start,
-        end=args.end,
+    parser = argparse.ArgumentParser(
+        description="Expand context for referenced functions, classes, or variables in a selected text range."
     )
-    extractor = ProjectContextExtractor(args.root)
-    context = extractor.get_context(selection, args.depth)
-    print(context)
+
+    parser.add_argument(
+        "-f", "--file", required=True, help="Path to the Python file to analyze"
+    )
+
+    parser.add_argument(
+        "-s",
+        "--start-line",
+        type=int,
+        required=True,
+        help="Starting line number of the selected text range",
+    )
+
+    parser.add_argument(
+        "-e",
+        "--end-line",
+        type=int,
+        required=True,
+        help="Ending line number of the selected text range",
+    )
+
+    parser.add_argument(
+        "-d",
+        "--depth",
+        type=int,
+        default=2,
+        help="Maximum recursion depth for expanding references (default: 2)",
+    )
+
+    parser.add_argument(
+        "-o",
+        "--output",
+        choices=["console", "file"],
+        default="console",
+        help="Output destination (default: console)",
+    )
+
+    parser.add_argument(
+        "--output-file",
+        default="expanded_context.md",
+        help="Output file path when using file output (default: expanded_context.md)",
+    )
+
+    parser.add_argument(
+        "--sort",
+        choices=["name", "type", "depth"],
+        default="depth",
+        help="Sort order for the output (default: depth)",
+    )
+
+    # Add arguments for filtering types
+    parser.add_argument(
+        "--no-functions",
+        action="store_true",
+        help="Exclude functions from the expanded context",
+    )
+
+    parser.add_argument(
+        "--no-classes",
+        action="store_true",
+        help="Exclude classes from the expanded context",
+    )
+
+    parser.add_argument(
+        "--no-variables",
+        action="store_true",
+        help="Exclude variables from the expanded context",
+    )
+
+    # Add argument for including only specific types
+    parser.add_argument(
+        "--only",
+        choices=["functions", "classes", "variables"],
+        help="Include only the specified type (functions, classes, or variables)",
+    )
+
+    args = parser.parse_args()
+
+    # Determine which types to include
+    include_functions = True
+    include_classes = True
+    include_variables = True
+
+    if args.only:
+        # If --only is specified, exclude everything else
+        include_functions = args.only == "functions"
+        include_classes = args.only == "classes"
+        include_variables = args.only == "variables"
+    else:
+        # Otherwise, respect the individual exclusion flags
+        if args.no_functions:
+            include_functions = False
+        if args.no_classes:
+            include_classes = False
+        if args.no_variables:
+            include_variables = False
+
+    expanded = expand_context(
+        args.file,
+        args.start_line,
+        args.end_line,
+        args.depth,
+        include_functions=include_functions,
+        include_classes=include_classes,
+        include_variables=include_variables,
+    )
+
+    # Prepare output content
+    output_lines = []
+    output_lines.append(f"# Expanded Context Report")
+    output_lines.append(f"")
+    output_lines.append(f"**File:** `{args.file}`  ")
+    output_lines.append(f"**Lines:** {args.start_line}-{args.end_line}  ")
+    output_lines.append(f"**Max Depth:** {args.depth}  ")
+
+    # Add information about included types
+    included_types = []
+    if include_functions:
+        included_types.append("functions")
+    if include_classes:
+        included_types.append("classes")
+    if include_variables:
+        included_types.append("variables")
+
+    output_lines.append(f"**Included Types:** {', '.join(included_types)}  ")
+    output_lines.append(f"**References Found:** {len(expanded)}  ")
+    output_lines.append("")
+
+    # Group items by depth for better visualization
+    items_by_depth = {}
+    for name, context in expanded.items():
+        if context.depth not in items_by_depth:
+            items_by_depth[context.depth] = []
+        items_by_depth[context.depth].append((name, context))
+
+    # Sort items according to user preference
+    sorted_items = []
+    for depth in sorted(items_by_depth.keys()):
+        items = items_by_depth[depth]
+        if args.sort == "name":
+            items = sorted(items, key=lambda x: x[0])
+        elif args.sort == "type":
+            items = sorted(items, key=lambda x: x[1].type)
+        # For depth sorting, we keep the default order by depth
+        sorted_items.extend([(depth, name, context) for name, context in items])
+
+    # Generate markdown output
+    current_depth = None
+    for depth, name, context in sorted_items:
+        if depth != current_depth:
+            current_depth = depth
+            output_lines.append(
+                f"## Depth {depth}: {'Direct references' if depth == 1 else f'References from depth {depth-1}'}"
+            )
+            output_lines.append("")
+
+        # Add item header with type and name
+        output_lines.append(f"### {context.type.capitalize()}: `{name}`")
+        output_lines.append(f"*Lines {context.line_start}-{context.line_end}*")
+        output_lines.append("")
+
+        # Add source code in a code block
+        output_lines.append("```")
+        output_lines.append(context.source)
+        output_lines.append("```")
+        output_lines.append("")
+
+    # Output the results
+    if args.output == "console":
+        for line in output_lines:
+            print(line)
+    else:  # file output
+        with open(args.output_file, "w") as f:
+            for line in output_lines:
+                f.write(line + "\n")
+        print(f"Results written to {args.output_file}")
 
 
 if __name__ == "__main__":
