@@ -94,40 +94,40 @@ for name, code_context in context.items():
 
 ## Example Output
 
-```markdown
-# Expanded Context Report
 
-**File:** `example.py`  
-**Lines:** 10-20  
-**Max Depth:** 2  
-**Included Types:** functions, classes, variables  
-**References Found:** 5  
+    # Expanded Context Report
 
-## Depth 1: Direct references
+    **File:** `example.py`  
+    **Lines:** 10-20  
+    **Max Depth:** 2  
+    **Included Types:** functions, classes, variables  
+    **References Found:** 5  
 
-### Function: `process_data`
-*Lines 25-35*
+    ## Depth 1: Direct references
 
-```
-# From /path/to/example.py
-def process_data(data):
-    """Process the input data and return results."""
-    result = transform(data)
-    return validate_output(result)
-```
+    ### Function: `process_data`
+    *Lines 25-35*
 
-## Depth 2: References from depth 1
+    ```
+    # From /path/to/example.py
+    def process_data(data):
+        """Process the input data and return results."""
+        result = transform(data)
+        return validate_output(result)
+    ```
 
-### Function: `transform`
-*Lines 65-70*
+    ## Depth 2: References from depth 1
 
-```
-# From /path/to/utils.py
-def transform(data):
-    """Transform the data according to business rules."""
-    return data.map(lambda x: x * 2)
-```
-```
+    ### Function: `transform`
+    *Lines 65-70*
+
+    ```
+    # From /path/to/utils.py
+    def transform(data):
+        """Transform the data according to business rules."""
+        return data.map(lambda x: x * 2)
+    ```
+
 
 ## Limitations
 
