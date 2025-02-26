@@ -294,6 +294,89 @@ def expand_context(
     return expand_context_recursive(selected_refs, all_definitions, max_depth)
 
 
+def expand_to_markdown(
+    filename: str,
+    start_line: int,
+    end_line: int,
+    depth: int,
+    include_functions=True,
+    include_classes=True,
+    include_variables=True,
+    sort=None,
+):
+    expanded = expand_context(
+        filename,
+        start_line,
+        end_line,
+        max_depth=depth,
+        include_functions=include_functions,
+        include_classes=include_classes,
+        include_variables=include_variables,
+    )
+
+    # Prepare output content
+    output_lines = []
+    output_lines.append(f"# Expanded Context Report")
+    output_lines.append(f"")
+    output_lines.append(f"**File:** `{filename}`  ")
+    output_lines.append(f"**Lines:** {start_line}-{end_line}  ")
+    output_lines.append(f"**Max Depth:** {depth}  ")
+
+    # Add information about included types
+    included_types = []
+    if include_functions:
+        included_types.append("functions")
+    if include_classes:
+        included_types.append("classes")
+    if include_variables:
+        included_types.append("variables")
+
+    output_lines.append(f"**Included Types:** {', '.join(included_types)}  ")
+    output_lines.append(f"**References Found:** {len(expanded)}  ")
+    output_lines.append("")
+
+    # Group items by depth for better visualization
+    items_by_depth = {}
+    for name, context in expanded.items():
+        if context.depth not in items_by_depth:
+            items_by_depth[context.depth] = []
+        items_by_depth[context.depth].append((name, context))
+
+    # Sort items according to user preference
+    sorted_items = []
+    for depth in sorted(items_by_depth.keys()):
+        items = items_by_depth[depth]
+        if sort == "name":
+            items = sorted(items, key=lambda x: x[0])
+        elif sort == "type":
+            items = sorted(items, key=lambda x: x[1].type)
+        # For depth sorting, we keep the default order by depth
+        sorted_items.extend([(depth, name, context) for name, context in items])
+
+    # Generate markdown output
+    current_depth = None
+    for depth, name, context in sorted_items:
+        if depth != current_depth:
+            current_depth = depth
+            output_lines.append(
+                f"## Depth {depth}: {'Direct references' if depth == 1 else f'References from depth {depth-1}'}"
+            )
+            output_lines.append("")
+
+        # Add item header with type and name
+        output_lines.append(f"### {context.type.capitalize()}: `{name}`")
+        output_lines.append(f"*Lines {context.line_start}-{context.line_end}*")
+        output_lines.append("")
+
+        # Add source code in a code block
+        output_lines.append("```")
+        output_lines.append(context.source)
+        output_lines.append("```")
+        output_lines.append("")
+
+    return "\n".join(output_lines)
+
+
 def main():
     parser = argparse.ArgumentParser(
         description="Expand context for referenced functions, classes, or variables in a selected text range."
@@ -395,7 +478,7 @@ def main():
         if args.no_variables:
             include_variables = False
 
-    expanded = expand_context(
+    output = expand_to_markdown(
         args.file,
         args.start_line,
         args.end_line,
@@ -403,77 +486,13 @@ def main():
         include_functions=include_functions,
         include_classes=include_classes,
         include_variables=include_variables,
+        sort=args.sort,
     )
+    if args.output_file:
+        with open(args.output_file, "w") as of:
+            of.write(output)
 
-    # Prepare output content
-    output_lines = []
-    output_lines.append(f"# Expanded Context Report")
-    output_lines.append(f"")
-    output_lines.append(f"**File:** `{args.file}`  ")
-    output_lines.append(f"**Lines:** {args.start_line}-{args.end_line}  ")
-    output_lines.append(f"**Max Depth:** {args.depth}  ")
-
-    # Add information about included types
-    included_types = []
-    if include_functions:
-        included_types.append("functions")
-    if include_classes:
-        included_types.append("classes")
-    if include_variables:
-        included_types.append("variables")
-
-    output_lines.append(f"**Included Types:** {', '.join(included_types)}  ")
-    output_lines.append(f"**References Found:** {len(expanded)}  ")
-    output_lines.append("")
-
-    # Group items by depth for better visualization
-    items_by_depth = {}
-    for name, context in expanded.items():
-        if context.depth not in items_by_depth:
-            items_by_depth[context.depth] = []
-        items_by_depth[context.depth].append((name, context))
-
-    # Sort items according to user preference
-    sorted_items = []
-    for depth in sorted(items_by_depth.keys()):
-        items = items_by_depth[depth]
-        if args.sort == "name":
-            items = sorted(items, key=lambda x: x[0])
-        elif args.sort == "type":
-            items = sorted(items, key=lambda x: x[1].type)
-        # For depth sorting, we keep the default order by depth
-        sorted_items.extend([(depth, name, context) for name, context in items])
-
-    # Generate markdown output
-    current_depth = None
-    for depth, name, context in sorted_items:
-        if depth != current_depth:
-            current_depth = depth
-            output_lines.append(
-                f"## Depth {depth}: {'Direct references' if depth == 1 else f'References from depth {depth-1}'}"
-            )
-            output_lines.append("")
-
-        # Add item header with type and name
-        output_lines.append(f"### {context.type.capitalize()}: `{name}`")
-        output_lines.append(f"*Lines {context.line_start}-{context.line_end}*")
-        output_lines.append("")
-
-        # Add source code in a code block
-        output_lines.append("```")
-        output_lines.append(context.source)
-        output_lines.append("```")
-        output_lines.append("")
-
-    # Output the results
-    if args.output == "console":
-        for line in output_lines:
-            print(line)
-    else:  # file output
-        with open(args.output_file, "w") as f:
-            for line in output_lines:
-                f.write(line + "\n")
-        print(f"Results written to {args.output_file}")
+    print(output)
 
 
 if __name__ == "__main__":
