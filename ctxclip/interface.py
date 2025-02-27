@@ -2,12 +2,13 @@ import ast
 import argparse
 from pathlib import Path
 from typing import Dict, Any
+import rst2gfm
 
 
 class APIExtractor(ast.NodeVisitor):
     """AST visitor that extracts the public API from Python modules."""
 
-    def __init__(self):
+    def __init__(self, convert_to_md=False):
         self.api = {
             "classes": {},
             "functions": {},
@@ -15,6 +16,7 @@ class APIExtractor(ast.NodeVisitor):
             "imports": {},
         }
         self.current_class = None
+        self.convert_to_md = convert_to_md
 
     def visit_ClassDef(self, node):
         """Extract information from class definitions."""
@@ -25,8 +27,11 @@ class APIExtractor(ast.NodeVisitor):
         prev_class = self.current_class
         self.current_class = node.name
 
+        docstring = ast.get_docstring(node, clean=True) or ""
+        if docstring and self.convert_to_md:
+            docstring = rst2gfm.convert_rst_to_md()
         class_info = {
-            "docstring": ast.get_docstring(node) or "",
+            "docstring": docstring,
             "methods": {},
             "attributes": {},
             "bases": [self._format_name(base) for base in node.bases],

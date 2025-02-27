@@ -27,7 +27,7 @@ class MyClass:
         return str(x)
 """
     tree = ast.parse(code)
-    extractor = APIExtractor()
+    extractor = APIExtractor(convert_to_md=False)
     extractor.visit(tree)
     
     assert "MyClass" in extractor.api["classes"]

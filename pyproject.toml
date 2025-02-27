@@ -2,6 +2,9 @@
 name = "ctxclip"
 description = "experimental python code context clipping"
 version = "0.0.1"
+dependencies = [
+    "rst2gfm >= 0.1.0",
+]
 
 [build-system]
 build-backend = 'setuptools.build_meta'
