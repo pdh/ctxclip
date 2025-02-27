@@ -32,7 +32,7 @@ class APIExtractor(ast.NodeVisitor):
             "bases": [self._format_name(base) for base in node.bases],
         }
 
-         # Store the class info
+        # Store the class info
         self.api["classes"][node.name] = class_info
 
         # Visit all nodes within the class
@@ -131,7 +131,6 @@ class APIExtractor(ast.NodeVisitor):
     def _get_function_signature(self, node):
         """Extract function signature from a FunctionDef node."""
         args = []
-
         # Add positional-only arguments (Python 3.8+)
         if hasattr(node.args, "posonlyargs"):
             for arg in node.args.posonlyargs:
@@ -550,15 +549,7 @@ def arg_parser(parser=None):
     return parser
 
 
-def main(args=None):
-    if not args:
-        parser = arg_parser()
-        args = parser.parse_args()
-
-    package_path = args.package
-    output_file = args.output
-
-    # Determine if it's a package or a module
+def document(package_path):
     path = Path(package_path)
     is_package = path.is_dir() and (path / "__init__.py").exists()
     is_module = path.is_file() and path.suffix == ".py"
@@ -582,8 +573,19 @@ def main(args=None):
     else:
         print(f"Error: {package_path} is neither a valid Python package nor a module")
         return
+    return markdown
+
+
+def main(args=None):
+    if not args:
+        parser = arg_parser()
+        args = parser.parse_args()
+
+    package_path = args.package
+    output_file = args.output
 
     print(f"Generating Markdown documentation...")
+    markdown = document(package_path)
 
     with open(output_file, "w", encoding="utf-8") as f:
         f.write(markdown)
