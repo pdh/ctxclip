@@ -14,6 +14,7 @@ class CodeContext:
     line_start: int
     line_end: int
     depth: int = 0  # Recursion depth in the reference chain
+    signature: str = ""
 
 
 def parse_file(file_path: str) -> Tuple[ast.Module, List[str]]:
@@ -29,6 +30,62 @@ def get_source_segment(node: ast.AST, lines: List[str]) -> str:
     if hasattr(node, "lineno") and hasattr(node, "end_lineno"):
         return "\n".join(lines[node.lineno - 1 : node.end_lineno])
     return ""
+
+
+def reconstruct_function_signature(func_def: ast.FunctionDef):
+    """
+    Reconstructs the function signature from an ast.FunctionDef node.
+    """
+    # Function name
+    func_name = func_def.name
+
+    # Arguments
+    args = []
+    for arg in func_def.args.args:
+        arg_str = arg.arg
+        if arg.annotation:
+            arg_str += f": {ast.unparse(arg.annotation)}"
+        args.append(arg_str)
+
+    # Vararg (*args)
+    if func_def.args.vararg:
+        vararg = f"*{func_def.args.vararg.arg}"
+        if func_def.args.vararg.annotation:
+            vararg += f": {ast.unparse(func_def.args.vararg.annotation)}"
+        args.append(vararg)
+
+    # Keyword-only arguments
+    for kwarg, default in zip(func_def.args.kwonlyargs, func_def.args.kw_defaults):
+        kwarg_str = kwarg.arg
+        if kwarg.annotation:
+            kwarg_str += f": {ast.unparse(kwarg.annotation)}"
+        if default:
+            kwarg_str += f" = {ast.unparse(default)}"
+        args.append(kwarg_str)
+
+    # Kwarg (**kwargs)
+    if func_def.args.kwarg:
+        kwarg = f"**{func_def.args.kwarg.arg}"
+        if func_def.args.kwarg.annotation:
+            kwarg += f": {ast.unparse(func_def.args.kwarg.annotation)}"
+        args.append(kwarg)
+
+    # Defaults for positional arguments
+    defaults = [None] * (
+        len(func_def.args.args) - len(func_def.args.defaults)
+    ) + func_def.args.defaults
+    for i, default in enumerate(defaults):
+        if default:
+            args[i] += f" = {ast.unparse(default)}"
+
+    # Return annotation
+    return_annotation = ""
+    if func_def.returns:
+        return_annotation = f" -> {ast.unparse(func_def.returns)}"
+
+    # Combine everything into a function signature
+    signature = f"def {func_name}({', '.join(args)}){return_annotation}"
+    return signature
 
 
 class DefinitionCollector(ast.NodeVisitor):
@@ -56,10 +113,11 @@ class DefinitionCollector(ast.NodeVisitor):
             if self.name_regex and not self.name_regex.match(node.name):
                 self.generic_visit(node)
                 return
-
+            signature = reconstruct_function_signature(node)
             self.definitions[node.name] = CodeContext(
                 name=node.name,
                 type="function",
+                signature=signature,
                 source=get_source_segment(node, self.lines),
                 line_start=node.lineno,
                 line_end=node.end_lineno,
