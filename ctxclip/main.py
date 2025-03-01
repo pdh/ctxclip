@@ -1,3 +1,5 @@
+"""Main CLI"""
+
 import argparse
 from ctxclip.expand import arg_parser as expand_parser
 from ctxclip.expand import main as expand_main
@@ -8,6 +10,7 @@ from ctxclip.graph import main as graph_main
 
 
 def main():
+    """entry to CLI"""
     parser = argparse.ArgumentParser(prog="ctxclip")
     subparsers = parser.add_subparsers(dest="command")
     expand = subparsers.add_parser("expand")

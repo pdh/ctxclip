@@ -1,3 +1,5 @@
+"""ctxtc package interface doc gen
+"""
 import ast
 import argparse
 from pathlib import Path
@@ -7,6 +9,7 @@ import rst2gfm
 
 class APIExtractor(ast.NodeVisitor):
     """AST visitor that extracts the public API from Python modules."""
+    # pylint: disable=missing-docstring disable=invalid-name
 
     def __init__(self, convert_to_md=False):
         self.api = {
@@ -29,7 +32,7 @@ class APIExtractor(ast.NodeVisitor):
 
         docstring = ast.get_docstring(node, clean=True) or ""
         if docstring and self.convert_to_md:
-            docstring = rst2gfm.convert_rst_to_md()
+            docstring = rst2gfm.convert_rst_to_md(docstring)
         class_info = {
             "docstring": docstring,
             "methods": {},
@@ -221,7 +224,10 @@ class APIExtractor(ast.NodeVisitor):
         elif isinstance(node, ast.NameConstant):  # Python 3.7 and earlier
             return repr(node.value)
         elif isinstance(node, ast.BinOp):
-            return f"{self._format_name(node.left)} {self._get_op_symbol(node.op)} {self._format_name(node.right)}"
+            left = self._format_name(node.left)
+            op = self._get_op_symbol(node.op)
+            right = self._format_name(node.right)
+            return f"{left} {op} {right}"
         elif isinstance(node, ast.UnaryOp):
             return f"{self._get_op_symbol(node.op)}{self._format_name(node.operand)}"
         elif isinstance(node, ast.keyword):
@@ -430,7 +436,8 @@ def generate_markdown(api: Dict[str, Any], name: str, is_package: bool = True) -
 
     return md
 
-
+# (module_name)
+# pylint: disable=unused-argument
 def _generate_module_markdown(api: Dict[str, Any], module_name: str) -> str:
     """
     Generate Markdown documentation for a single module.
@@ -531,6 +538,8 @@ def _generate_module_markdown(api: Dict[str, Any], module_name: str) -> str:
     if api.get("imports"):
         md += "### Imports\n\n"
 
+        # (import_name)
+        #pylint: disable=unused-variable
         for import_name, import_info in sorted(api["imports"].items()):
             if import_info.get("alias"):
                 md += f"- `{import_info['module']} as {import_info['alias']}`\n"
@@ -543,6 +552,7 @@ def _generate_module_markdown(api: Dict[str, Any], module_name: str) -> str:
 
 
 def arg_parser(parser=None):
+    """argument parsing"""
     if not parser:
         parser = argparse.ArgumentParser(
             description="Generate API documentation for a Python package using AST parsing",
@@ -555,17 +565,10 @@ def arg_parser(parser=None):
 
 
 def document(package_path):
+    """generate markdown docs for package_path"""
     path = Path(package_path)
     is_package = path.is_dir() and (path / "__init__.py").exists()
     is_module = path.is_file() and path.suffix == ".py"
-
-    if not output_file:
-        if is_package:
-            output_file = f"{path.name}_api.md"
-        elif is_module:
-            output_file = f"{path.stem}_api.md"
-        else:
-            output_file = "python_api.md"
 
     print(f"Extracting API from {package_path}...")
 
@@ -582,6 +585,7 @@ def document(package_path):
 
 
 def main(args=None):
+    """cli entrypoint"""
     if not args:
         parser = arg_parser()
         args = parser.parse_args()
@@ -589,7 +593,7 @@ def main(args=None):
     package_path = args.package
     output_file = args.output
 
-    print(f"Generating Markdown documentation...")
+    print("Generating Markdown documentation...")
     markdown = document(package_path)
 
     with open(output_file, "w", encoding="utf-8") as f:

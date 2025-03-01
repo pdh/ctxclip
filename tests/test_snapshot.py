@@ -1,14 +1,15 @@
-import pytest
+"""test debug snapshot"""
+
 import os
 import tempfile
-import pickle
 import sys
-import io
 from unittest.mock import patch, MagicMock
+import importlib.util
+import pytest
 
-# Import the snapshot debugger module
-# Assuming the main module is named snapshot.py with create_snapshot_cli as the main function
 from ctxclip import snapshot
+
+# pylint: disable=redefined-outer-name
 
 
 @pytest.fixture
@@ -19,7 +20,7 @@ def test_environment():
     test_file = os.path.join(test_dir, "test_script.py")
 
     # Create a simple test Python file
-    with open(test_file, "w") as f:
+    with open(test_file, "w", encoding="utf-8") as f:
         f.write(
             """
 def example_function(a, b):
@@ -55,7 +56,7 @@ def test_inject_snapshot_code(test_environment):
     assert os.path.exists(temp_file)
 
     # Read the content and verify the snapshot call was injected
-    with open(temp_file, "r") as f:
+    with open(temp_file, "r", encoding="utf-8") as f:
         content = f.read()
 
     # Check that the debugger code was injected
@@ -97,7 +98,7 @@ def test_create_snapshot_cli(mock_run, test_environment, monkeypatch, capsys):
 
     # Setup mocks
     mock_temp_file = os.path.join(test_dir, "temp_script.py")
-    
+
     with patch("ctxclip.snapshot.inject_snapshot_code") as mock_inject:
         mock_inject.return_value = mock_temp_file
 
@@ -161,14 +162,13 @@ def test_filter_picklable(test_environment):
     temp_module_name = os.path.basename(temp_file).replace(".py", "")
 
     # Use importlib to import the module
-    import importlib.util
 
     spec = importlib.util.spec_from_file_location(temp_module_name, temp_file)
     temp_module = importlib.util.module_from_spec(spec)
     spec.loader.exec_module(temp_module)
 
     # Create a DebugSnapshot instance
-    debugger = temp_module._snapshot_debugger
+    debugger = temp_module._snapshot_debugger  # pylint: disable=protected-access
 
     # Test with picklable and non-picklable objects
     test_dict = {
@@ -178,7 +178,7 @@ def test_filter_picklable(test_environment):
         "unpicklable": lambda x: x,  # Functions are not picklable
     }
 
-    filtered = debugger._filter_picklable(test_dict)
+    filtered = debugger._filter_picklable(test_dict) # pylint: disable=protected-access
 
     # Check that picklable objects are preserved
     assert filtered["number"] == 42
@@ -200,7 +200,7 @@ def test_line_number_out_of_range(test_environment):
     test_dir = test_environment["test_dir"]
 
     # Get the number of lines in the test file
-    with open(test_file, "r") as f:
+    with open(test_file, "r", encoding="utf-8") as f:
         num_lines = len(f.readlines())
 
     # Try to inject at a line number beyond the end of the file
@@ -209,7 +209,7 @@ def test_line_number_out_of_range(test_environment):
     )
 
     # Read the content
-    with open(temp_file, "r") as f:
+    with open(temp_file, "r", encoding="utf-8") as f:
         content = f.read()
 
     # The snapshot call should be added at the end
@@ -255,11 +255,10 @@ def test_subprocess_error(test_environment, monkeypatch):
                 args = MagicMock()
                 args.file = test_file
                 args.line_num = 3
-                args.label = 'foo'
+                args.label = "foo"
                 args.output_dir = "debug_snapshots"
                 args.args = []
                 mock_parse_args.return_value = args
 
                 with pytest.raises(SystemExit):
-                    # import ipdb; ipdb.set_trace()
                     snapshot.create_snapshot_cli()

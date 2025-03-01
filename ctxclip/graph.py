@@ -1,16 +1,191 @@
+"""dependency graph generator
+"""
+
 import ast
 import os
-import networkx as nx
 import json
+import tempfile
 from pathlib import Path
+import argparse
+import networkx as nx
 from ctxclip import interface as api
 from ctxclip import expand
 
 
+def standardize_node_id(name, module_context=None):
+    """Create a standardized node ID to prevent duplication."""
+    # If it's already a fully qualified name (contains a dot)
+    if "." in name:
+        return name
+    # Otherwise, qualify it with the module context
+    if module_context:
+        return f"{module_context}.{name}"
+    return name
+
+
+def merge_duplicate_nodes(graph):
+    """merge duplicate graph nodes"""
+    # First approach: merge by path and line numbers
+    canonical_map = {}
+
+    # First pass: identify duplicates based on path and line numbers
+    for node_id in list(graph.nodes()):
+        node_data = graph.nodes[node_id]
+        if (
+            "path" in node_data
+            and "line_start" in node_data
+            and "line_end" in node_data
+        ):
+            canonical_key = (
+                f"{node_data['path']}:{node_data['line_start']}-{node_data['line_end']}"
+            )
+            if canonical_key not in canonical_map:
+                canonical_map[canonical_key] = []
+            canonical_map[canonical_key].append(node_id)
+
+    # Second pass: merge duplicates by path/line
+    for canonical_key, node_ids in canonical_map.items():
+        if len(node_ids) > 1:
+            # Choose the most qualified name as the primary node
+            primary_node = max(node_ids, key=lambda x: x.count("."))
+
+            # Merge attributes and redirect edges
+            for node_id in node_ids:
+                if node_id != primary_node:
+                    # Merge attributes
+                    for attr, value in graph.nodes[node_id].items():
+                        if (
+                            attr == "code"
+                            and value
+                            and (
+                                not graph.nodes[primary_node].get("code")
+                                or graph.nodes[primary_node]["code"] == ""
+                            )
+                        ):
+                            graph.nodes[primary_node]["code"] = value
+                        elif value and (
+                            attr not in graph.nodes[primary_node]
+                            or not graph.nodes[primary_node][attr]
+                        ):
+                            graph.nodes[primary_node][attr] = value
+
+                    # Redirect edges and remove the duplicate
+                    _redirect_edges_and_remove(graph, node_id, primary_node)
+
+    # Second approach: merge by name (for nodes that might have different path info)
+    name_map = {}
+
+    # Group nodes by their simple name (last part after the dot)
+    for node_id in list(graph.nodes()):
+        if "." in node_id:
+            simple_name = node_id.split(".")[-1]
+            if simple_name not in name_map:
+                name_map[simple_name] = []
+            name_map[simple_name].append(node_id)
+
+    # Merge nodes with the same simple name
+    for simple_name, node_ids in name_map.items():
+        if len(node_ids) > 1:
+            # Check if these nodes might be duplicates by comparing code or other attributes
+            for i, node1 in enumerate(node_ids):
+                for j in range(i + 1, len(node_ids)):
+                    node2 = node_ids[j]
+                    # node1, node2 = node_ids[i], node_ids[j]
+                    # If one has code and the other doesn't, they might be duplicates
+                    if (
+                        graph.nodes[node1].get("code")
+                        and not graph.nodes[node2].get("code")
+                    ) or (
+                        graph.nodes[node2].get("code")
+                        and not graph.nodes[node1].get("code")
+                    ):
+                        # Choose the more qualified name (with more dots)
+                        primary = (
+                            node1 if node1.count(".") >= node2.count(".") else node2
+                        )
+                        secondary = node2 if primary == node1 else node1
+
+                        # Merge attributes
+                        for attr, value in graph.nodes[secondary].items():
+                            if (
+                                attr == "code"
+                                and value
+                                and not graph.nodes[primary].get("code")
+                            ):
+                                graph.nodes[primary]["code"] = value
+                            elif value and (
+                                attr not in graph.nodes[primary]
+                                or not graph.nodes[primary][attr]
+                            ):
+                                graph.nodes[primary][attr] = value
+
+                        # Redirect edges and remove the duplicate
+                        _redirect_edges_and_remove(graph, secondary, primary)
+
+    return graph
+
+
+def _redirect_edges_and_remove(graph, node_id, primary_node):
+    """Helper function to redirect edges and remove a node."""
+    # Redirect incoming edges
+    for pred in list(graph.predecessors(node_id)):
+        for _, data in graph.get_edge_data(pred, node_id).items():
+            graph.add_edge(pred, primary_node, **data)
+
+    # Redirect outgoing edges
+    for succ in list(graph.successors(node_id)):
+        for _, data in graph.get_edge_data(node_id, succ).items():
+            graph.add_edge(primary_node, succ, **data)
+
+    # Remove the duplicate node
+    graph.remove_node(node_id)
+
+
 class DependencyGraphGenerator:
+    """dependency graph gen"""
+
     def __init__(self):
         self.graph = nx.DiGraph()
         self.module_map = {}  # Maps module names to file paths
+        self.name_registry = {}  # Maps various forms of names to canonical IDs
+
+    def get_canonical_id(self, name, module_context=None):
+        """return canonical id"""
+        # Try the name as is
+        if name in self.name_registry:
+            return self.name_registry[name]
+
+        # Try with module context
+        if module_context:
+            qualified_name = f"{module_context}.{name}"
+            if qualified_name in self.name_registry:
+                return self.name_registry[qualified_name]
+
+        # Try looking for the unqualified name if this is a qualified name
+        if "." in name:
+            simple_name = name.split(".")[-1]
+            if simple_name in self.name_registry:
+                # Check if they point to the same file and line
+                simple_node = self.graph.nodes.get(self.name_registry[simple_name], {})
+                qualified_node = self.graph.nodes.get(name, {})
+
+                if simple_node.get("path") == qualified_node.get(
+                    "path"
+                ) and simple_node.get("line_start") == qualified_node.get("line_start"):
+                    return self.name_registry[simple_name]
+
+        # If not found, create a new canonical ID
+        canonical_id = standardize_node_id(name, module_context)
+        self.name_registry[name] = canonical_id
+        if module_context:
+            self.name_registry[f"{module_context}.{name}"] = canonical_id
+
+        # Also register the simple name if this is a qualified name
+        if "." in canonical_id:
+            simple_name = canonical_id.split(".")[-1]
+            self.name_registry[simple_name] = canonical_id
+
+        return canonical_id
 
     def analyze_project(self, project_path: str) -> nx.DiGraph:
         """Analyze a Python project and build a dependency graph."""
@@ -49,7 +224,9 @@ class DependencyGraphGenerator:
             for node in ast.walk(tree):
                 if isinstance(node, ast.Import):
                     for name in node.names:
-                        imported_names[name.asname or name.name] = name.name
+                        imported_name = name.asname or name.name
+                        canonical_id = self.get_canonical_id(name.name)
+                        self.name_registry[imported_name] = canonical_id
                         if name.name in self.module_map:
                             self.graph.add_edge(module_name, name.name, type="import")
 
@@ -61,27 +238,26 @@ class DependencyGraphGenerator:
 
                     for name in node.names:
                         if node.module:
-                            imported_names[name.asname or name.name] = (
-                                f"{node.module}.{name.name}"
-                            )
+                            imported_name = name.asname or name.name
+                            qualified_name = f"{node.module}.{name.name}"
+                            imported_names[imported_name] = qualified_name
 
-                        # Add the imported object as a node
-                        if node.module:
-                            full_name = f"{node.module}.{name.name}"
+                            node_id = standardize_node_id(qualified_name)
                             self.graph.add_node(
-                                full_name, type="object", parent=node.module
+                                node_id, type="object", parent=node.module
                             )
                             self.graph.add_edge(
-                                module_name, full_name, type="import_object"
+                                module_name, node_id, type="import_object"
                             )
 
             # Analyze classes and functions
             for node in ast.iter_child_nodes(tree):
                 if isinstance(node, ast.ClassDef):
-                    class_name = f"{module_name}.{node.name}"
+                    class_name = standardize_node_id(node.name, module_name)
                     # Check if node already exists (from imports) and update it
                     if class_name in self.graph:
                         self.graph.nodes[class_name]["type"] = "class"
+                        self.graph.nodes[class_name]["path"] = file_path
                         # Also update line numbers if needed
                         self.graph.nodes[class_name]["line_start"] = node.lineno
                         self.graph.nodes[class_name]["line_end"] = node.end_lineno
@@ -89,6 +265,7 @@ class DependencyGraphGenerator:
                         self.graph.add_node(
                             class_name,
                             type="class",
+                            path=file_path,
                             parent=module_name,
                             line_start=node.lineno,
                             line_end=node.end_lineno,
@@ -102,34 +279,44 @@ class DependencyGraphGenerator:
                             # Check if it's an imported name
                             if base_name in imported_names:
                                 qualified_base = imported_names[base_name]
-                                # Look for the fully qualified name in the graph
-                                for potential_match in self.graph.nodes():
-                                    if (
-                                        potential_match.endswith(f".{qualified_base}")
-                                        or potential_match == qualified_base
-                                    ):
-                                        self.graph.add_edge(
-                                            class_name, potential_match, type="inherits"
-                                        )
-                                        break
+                                # Standardize the base class name
+                                std_qualified_base = standardize_node_id(qualified_base)
+                                if std_qualified_base in self.graph.nodes():
+                                    self.graph.add_edge(
+                                        class_name, std_qualified_base, type="inherits"
+                                    )
+                                else:
+                                    # Try to find by suffix matching if not found directly
+                                    for potential_match in self.graph.nodes():
+                                        if potential_match.endswith(
+                                            f".{qualified_base}"
+                                        ):
+                                            self.graph.add_edge(
+                                                class_name,
+                                                potential_match,
+                                                type="inherits",
+                                            )
+                                            break
                             # Also try the simple name in case it's defined in the same module
-                            local_base = f"{module_name}.{base_name}"
+                            local_base = standardize_node_id(base_name, module_name)
                             if local_base in self.graph:
                                 self.graph.add_edge(
                                     class_name, local_base, type="inherits"
                                 )
                 elif isinstance(node, ast.FunctionDef):
-                    func_name = f"{module_name}.{node.name}"
+                    func_name = standardize_node_id(node.name, module_name)
                     if func_name in self.graph:
                         self.graph.nodes[func_name]["type"] = "function"
                         # Update line numbers if not present
                         if "line_start" not in self.graph.nodes[func_name]:
                             self.graph.nodes[func_name]["line_start"] = node.lineno
                             self.graph.nodes[func_name]["line_end"] = node.end_lineno
+                            self.graph.nodes[func_name]["path"] = file_path
                     else:
                         self.graph.add_node(
                             func_name,
                             type="function",
+                            path=file_path,
                             parent=module_name,
                             line_start=node.lineno,
                             line_end=node.end_lineno,
@@ -145,21 +332,27 @@ class DependencyGraphGenerator:
                             # Check if it's an imported name
                             if called_func in imported_names:
                                 qualified_func = imported_names[called_func]
-                                for potential_match in self.graph.nodes():
-                                    if (
-                                        potential_match.endswith(f".{qualified_func}")
-                                        or potential_match == qualified_func
-                                    ):
-                                        self.graph.add_edge(
-                                            func_name, potential_match, type="calls"
-                                        )
-                                        break
+                                std_qualified_func = standardize_node_id(qualified_func)
+                                if std_qualified_func in self.graph.nodes():
+                                    self.graph.add_edge(
+                                        func_name, std_qualified_func, type="calls"
+                                    )
+                                else:
+                                    # Try to find by suffix matching if not found directly
+                                    for potential_match in self.graph.nodes():
+                                        if potential_match.endswith(
+                                            f".{qualified_func}"
+                                        ):
+                                            self.graph.add_edge(
+                                                func_name, potential_match, type="calls"
+                                            )
+                                            break
                             # Try local function
-                            local_func = f"{module_name}.{called_func}"
+                            local_func = standardize_node_id(called_func, module_name)
                             if local_func in self.graph:
                                 self.graph.add_edge(func_name, local_func, type="calls")
 
-        except Exception as e:
+        except Exception as e:  # pylint: disable=broad-exception-caught
             print(f"Error analyzing {file_path}: {e}")
 
     def _post_process_node_types(self):
@@ -179,17 +372,19 @@ class DependencyGraphGenerator:
             target_node = self.graph.nodes[target]
             # If the node is defined by a module, check what kind of definition it is
             if self.graph.nodes[source].get("type") == "module":
+                # Get the node name (last part of the qualified name)
+                node_name = target.split(".")[-1]
+
                 # The target node's name should indicate its type
-                if target.split(".")[-1][
-                    0
-                ].isupper():  # Class names typically start with uppercase
+                if node_name[0].isupper():  # Class names typically start with uppercase
                     self.graph.nodes[target]["type"] = "class"
                 elif "." in target and any(
                     target.endswith(f".{x}") for x in ["__init__", "__call__"]
                 ):
                     self.graph.nodes[target]["type"] = "method"
                 elif target_node.get("type") == "object":
-                    # If it's currently marked as object but has a defines edge, it's likely a function
+                    # If it's currently marked as object but has a defines edge
+                    # it's likely a function
                     self.graph.nodes[target]["type"] = "function"
 
         # Look for inheritance relationships to identify classes
@@ -207,7 +402,7 @@ class DependencyGraphGenerator:
     def export_json(self, output_path: str) -> None:
         """Export the dependency graph to a JSON file."""
         data = nx.node_link_data(self.graph)
-        with open(output_path, "w") as f:
+        with open(output_path, "w", encoding="utf-8") as f:
             json.dump(data, f, indent=2)
 
     def export_dot(self, output_path: str) -> None:
@@ -227,6 +422,14 @@ class DependencyGraphGenerator:
                     "type": node_data.get("type", "unknown"),
                     "parent": node_data.get("parent", ""),
                     "path": node_data.get("path", ""),
+                    "line_start": node_data.get("line_start", ""),
+                    "line_end": node_data.get("line_end", ""),
+                    "code": node_data.get("code", ""),
+                    "depth": node_data.get("depth", ""),
+                    "docstring": node_data.get("docstring", ""),
+                    "signature": node_data.get("signature", ""),
+                    "is_public_api": node_data.get("is_public_api", ""),
+                    "methods": node_data.get("methods", ""),
                 }
             )
 
@@ -239,12 +442,14 @@ class DependencyGraphGenerator:
                 }
             )
 
-        with open(output_path, "w") as f:
+        with open(output_path, "w", encoding="utf-8") as f:
             json.dump({"nodes": nodes, "links": links}, f, indent=2)
 
 
 # Integrated workflow
 def analyze_codebase(project_path):
+    """integrated workflow that gens pub api, expands context, and gens dep graph"""
+    # pylint: disable=unused-variable
     # 1. Document public interfaces using the APIExtractor
     package_api = api.extract_package_api(project_path)
 
@@ -259,13 +464,11 @@ def analyze_codebase(project_path):
         # Get AST and lines for this file
         try:
             file_tree, file_lines = expand.parse_file(file_path)
-
             # For each node in our graph that has location information
             for node_id in list(graph.nodes()):
                 node_data = graph.nodes[node_id]
-
                 if (
-                    node_data.get("type") in ["function", "class", "variable"]
+                    node_data.get("type") in ["function", "class", "variable", "object"]
                     and "path" in node_data
                 ):
                     # If this node is from the current file
@@ -274,12 +477,13 @@ def analyze_codebase(project_path):
                         and "line_start" in node_data
                         and "line_end" in node_data
                     ):
+
                         # Use the context expander to get deeper insights
                         expanded_contexts = expand.expand_context(
                             file_path=file_path,
                             start_line=node_data["line_start"],
                             end_line=node_data["line_end"],
-                            max_depth=2,  # Adjust depth as needed
+                            max_depth=1,  # Adjust depth as needed
                             include_functions=True,
                             include_classes=True,
                             include_variables=True,
@@ -287,29 +491,49 @@ def analyze_codebase(project_path):
 
                         # Add discovered dependencies to graph
                         for ref_name, context in expanded_contexts.items():
-                            # Add the reference as a node if it doesn't exist
-                            if ref_name not in graph.nodes():
+                            # Standardize the reference name
+                            std_ref_name = standardize_node_id(ref_name)
+
+                            # Check if a similar node exists with a different ID
+                            existing_node = None
+                            for node_id in graph.nodes():
+                                node_data = graph.nodes[node_id]
+                                if (
+                                    node_data.get("path") == file_path
+                                    and node_data.get("line_start")
+                                    == context.line_start
+                                    and node_data.get("line_end") == context.line_end
+                                ):
+                                    existing_node = node_id
+                                    break
+
+                            if existing_node:
+                                # Use the existing node instead
+                                std_ref_name = existing_node
+                                graph.nodes[existing_node]["code"] = context.source
+                                graph.nodes[existing_node]["depth"] = context.depth
+                            elif std_ref_name not in graph.nodes():
+                                # Add as a new node
                                 graph.add_node(
-                                    ref_name,
+                                    std_ref_name,
                                     type=context.type,
                                     line_start=context.line_start,
                                     line_end=context.line_end,
-                                    source=context.source,
+                                    code=context.source,
                                     depth=context.depth,
                                 )
-
-                            # Add edge showing the dependency relationship
-                            graph.add_edge(
-                                node_id, ref_name, type="reference", depth=context.depth
-                            )
-        except Exception as e:
+                            else:
+                                # Update existing node
+                                graph.nodes[std_ref_name]["code"] = context.source
+                                graph.nodes[std_ref_name]["depth"] = context.depth
+        except Exception as e:  # pylint: disable=broad-exception-caught
             print(f"Error processing file {file_path}: {e}")
 
     # 4. Annotate graph with interface information from the API extractor
     for module_name, module_info in package_api.get("modules", {}).items():
         # Add class information
         for class_name, class_info in module_info.get("classes", {}).items():
-            full_name = f"{module_name}.{class_name}"
+            full_name = standardize_node_id(class_name, module_name)
             if full_name in graph.nodes():
                 graph.nodes[full_name]["is_public_api"] = True
                 graph.nodes[full_name]["docstring"] = class_info.get("docstring", "")
@@ -323,7 +547,10 @@ def analyze_codebase(project_path):
 
             # Add method information
             for method_name, method_info in class_info.get("methods", {}).items():
-                full_method_name = f"{module_name}.{class_name}.{method_name}"
+                # full_method_name = f"{module_name}.{class_name}.{method_name}"
+                full_method_name = standardize_node_id(
+                    f"{class_name}.{method_name}", module_name
+                )
                 if full_method_name in graph.nodes():
                     graph.nodes[full_method_name]["is_public_api"] = True
                     graph.nodes[full_method_name]["docstring"] = method_info.get(
@@ -335,7 +562,9 @@ def analyze_codebase(project_path):
 
         # Add function information
         for func_name, func_info in module_info.get("functions", {}).items():
-            full_name = f"{module_name}.{func_name}"
+            full_name = standardize_node_id(
+                func_name, module_name
+            )  # f"{module_name}.{func_name}"
             if full_name in graph.nodes():
                 graph.nodes[full_name]["is_public_api"] = True
                 graph.nodes[full_name]["docstring"] = func_info.get("docstring", "")
@@ -343,7 +572,9 @@ def analyze_codebase(project_path):
 
         # Add variable information
         for var_name, var_info in module_info.get("variables", {}).items():
-            full_name = f"{module_name}.{var_name}"
+            full_name = standardize_node_id(
+                var_name, module_name
+            )  # f"{module_name}.{var_name}"
             if full_name in graph.nodes():
                 graph.nodes[full_name]["is_public_api"] = True
                 graph.nodes[full_name]["type"] = var_info.get("type", "unknown")
@@ -366,8 +597,59 @@ def analyze_codebase(project_path):
             # Recursively process subpackages
             for subpkg_name, subpkg_info in pkg_info.get("packages", {}).items():
                 new_prefix = f"{prefix}.{subpkg_name}" if prefix else subpkg_name
-                process_package(subpkg_info, new_prefix)
+                # pylint: disable=cell-var-from-loop
+                process_package(
+                    subpkg_info, new_prefix
+                )
 
         process_package(package_info, package_name)
+    graph = merge_duplicate_nodes(graph)
+    return graph, graph_generator
 
-    return graph
+
+def arg_parser(parser=None):
+    """arg parser"""
+    if not parser:
+        parser = argparse.ArgumentParser(
+            description="Generate a dependency graph for a Python package",
+        )
+    parser.add_argument(
+        "package", help="Path to the package or module to generate graph"
+    )
+    parser.add_argument("--output", "-o", help="output file")
+    parser.add_argument(
+        "--format",
+        "-f",
+        choices=["json", "dot", "d3"],
+        default="d3",
+        help="output file format (json, dot, d3)",
+    )
+    parser.add_argument("--deep", "-a", help="combined analysis")
+    return parser
+
+
+def main(args=None):
+    """cli entry"""
+    if not args:
+        parser = arg_parser()
+        args = parser.parse_args()
+
+    package_path = args.package
+    output_file = args.output
+    tempf = None
+    if not output_file:
+        tempf = tempfile.NamedTemporaryFile(mode="w", delete=False)
+        output_file = tempf.name
+
+    _, generator = analyze_codebase(package_path)
+    if args.format == "dot":
+        generator.export_dot(output_file)
+    elif args.format == "json":
+        generator.export_json(output_file)
+    else:
+        generator.export_d3_format(output_file)
+
+    if tempf:
+        with open(output_file, encoding="utf-8") as f:
+            print(f.read())
+        os.remove(output_file)

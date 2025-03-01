@@ -1,13 +1,18 @@
+"""context expander"""
+
 import ast
 import os
 import re
 import argparse
 from dataclasses import dataclass
 from typing import Dict, List, Set, Tuple
+import textwrap
 
 
 @dataclass
 class CodeContext:
+    """CodeContext"""
+
     name: str
     type: str  # 'function', 'class', 'variable'
     source: str
@@ -19,7 +24,7 @@ class CodeContext:
 
 def parse_file(file_path: str) -> Tuple[ast.Module, List[str]]:
     """Parse a Python file and return its AST and source lines."""
-    with open(file_path, "r") as f:
+    with open(file_path, "r", encoding="utf-8") as f:
         source = f.read()
         lines = source.splitlines()
     return ast.parse(source), lines
@@ -91,6 +96,8 @@ def reconstruct_function_signature(func_def: ast.FunctionDef):
 class DefinitionCollector(ast.NodeVisitor):
     """Collect all definitions (functions, classes, variables) in a file."""
 
+    # pylint: disable=missing-docstring disable=invalid-name
+
     def __init__(
         self,
         lines,
@@ -99,6 +106,7 @@ class DefinitionCollector(ast.NodeVisitor):
         include_variables=True,
         name_pattern=None,
     ):
+        self.current_path = []
         self.definitions: Dict[str, CodeContext] = {}
         self.lines = lines
         self.include_functions = include_functions
@@ -107,7 +115,15 @@ class DefinitionCollector(ast.NodeVisitor):
         self.name_pattern = name_pattern
         self.name_regex = re.compile(name_pattern) if name_pattern else None
 
+    def visit_Module(self, node):
+        # Add module name if available
+        module_name = getattr(node, "name", "")
+        if module_name:
+            self.current_path.append(module_name)
+        self.generic_visit(node)
+
     def visit_FunctionDef(self, node: ast.FunctionDef):
+        full_path = ".".join(self.current_path + [node.name])
         if self.include_functions:
             # Skip if name doesn't match pattern
             if self.name_regex and not self.name_regex.match(node.name):
@@ -115,7 +131,7 @@ class DefinitionCollector(ast.NodeVisitor):
                 return
             signature = reconstruct_function_signature(node)
             self.definitions[node.name] = CodeContext(
-                name=node.name,
+                name=full_path,
                 type="function",
                 signature=signature,
                 source=get_source_segment(node, self.lines),
@@ -125,6 +141,7 @@ class DefinitionCollector(ast.NodeVisitor):
         self.generic_visit(node)
 
     def visit_ClassDef(self, node: ast.ClassDef):
+        self.current_path.append(node.name)
         if self.include_classes:
             # Skip if name doesn't match pattern
             if self.name_regex and not self.name_regex.match(node.name):
@@ -160,6 +177,8 @@ class DefinitionCollector(ast.NodeVisitor):
 
 class ReferenceExtractor(ast.NodeVisitor):
     """Extract all names referenced in a code snippet."""
+
+    # pylint: disable=missing-docstring disable=invalid-name
 
     def __init__(self):
         self.references: Set[str] = set()
@@ -281,7 +300,7 @@ def expand_context_recursive(
 
 def extract_references_from_range(file_path, start_line, end_line):
     """Extract all references from the selected text range."""
-    with open(file_path, "r") as f:
+    with open(file_path, "r", encoding="utf-8") as f:
         lines = f.readlines()
 
     # Extract the lines and preserve their exact content
@@ -298,8 +317,6 @@ def extract_references_from_range(file_path, start_line, end_line):
         return extractor.references
     except SyntaxError:
         # If that fails, try to dedent the code before parsing
-        import textwrap
-
         try:
             dedented_text = textwrap.dedent(selected_text)
             selected_tree = ast.parse(dedented_text)
@@ -362,6 +379,7 @@ def expand_to_markdown(
     include_variables=True,
     sort=None,
 ):
+    """Expand context for references in the selected text range and return markdown"""
     expanded = expand_context(
         filename,
         start_line,
@@ -374,8 +392,8 @@ def expand_to_markdown(
 
     # Prepare output content
     output_lines = []
-    output_lines.append(f"# Expanded Context Report")
-    output_lines.append(f"")
+    output_lines.append("# Expanded Context Report")
+    output_lines.append("")
     output_lines.append(f"**File:** `{filename}`  ")
     output_lines.append(f"**Lines:** {start_line}-{end_line}  ")
     output_lines.append(f"**Max Depth:** {depth}  ")
@@ -416,8 +434,11 @@ def expand_to_markdown(
     for depth, name, context in sorted_items:
         if depth != current_depth:
             current_depth = depth
+            refs = f"References from depth {depth-1}"
+            if depth == 1:
+                refs = "Direct references"
             output_lines.append(
-                f"## Depth {depth}: {'Direct references' if depth == 1 else f'References from depth {depth-1}'}"
+                f"## Depth {depth}: {refs}"
             )
             output_lines.append("")
 
@@ -436,6 +457,7 @@ def expand_to_markdown(
 
 
 def arg_parser(parser=None):
+    """parse args"""
     if not parser:
         parser = argparse.ArgumentParser()
 
@@ -517,6 +539,7 @@ def arg_parser(parser=None):
 
 
 def main(args=None):
+    """cli entrypoint"""
     if not args:
         parser = arg_parser()
         args = parser.parse_args()
@@ -551,7 +574,7 @@ def main(args=None):
         sort=args.sort,
     )
     if args.output_file:
-        with open(args.output_file, "w") as of:
+        with open(args.output_file, "w", encoding="utf-8") as of:
             of.write(output)
 
     print(output)
