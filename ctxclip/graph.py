@@ -7,12 +7,13 @@ import json
 import tempfile
 from pathlib import Path
 import argparse
+import traceback
 import networkx as nx
 from ctxclip import interface as api
 from ctxclip import expand
 
 
-def standardize_node_id(name, module_context=None):
+def standardize_node_id(name: str, module_context: str = None):
     """Create a standardized node ID to prevent duplication."""
     # If it's already a fully qualified name (contains a dot)
     if "." in name:
@@ -83,44 +84,47 @@ def merge_duplicate_nodes(graph):
                 name_map[simple_name] = []
             name_map[simple_name].append(node_id)
 
-    # Merge nodes with the same simple name
-    for simple_name, node_ids in name_map.items():
-        if len(node_ids) > 1:
-            # Check if these nodes might be duplicates by comparing code or other attributes
-            for i, node1 in enumerate(node_ids):
-                for j in range(i + 1, len(node_ids)):
-                    node2 = node_ids[j]
-                    # node1, node2 = node_ids[i], node_ids[j]
-                    # If one has code and the other doesn't, they might be duplicates
-                    if (
-                        graph.nodes[node1].get("code")
-                        and not graph.nodes[node2].get("code")
-                    ) or (
-                        graph.nodes[node2].get("code")
-                        and not graph.nodes[node1].get("code")
-                    ):
-                        # Choose the more qualified name (with more dots)
-                        primary = (
-                            node1 if node1.count(".") >= node2.count(".") else node2
-                        )
-                        secondary = node2 if primary == node1 else node1
+    # FIXME this will incorrectly merge funcs when modules\
+    # have the same func signature
+    # # Merge nodes with the same simple name
+    # for simple_name, node_ids in name_map.items():
+    #     if len(node_ids) > 1:
+    #         # Check if these nodes might be duplicates by comparing code or other attributes
+    #         for i in range(len(node_ids)):
+    #             for j in range(i + 1, len(node_ids)):
+    #                 # node2 = node_ids[j]
+    #                 node1, node2 = node_ids[i], node_ids[j]
+    #                 # If one has code and the other doesn't, they might be duplicates
+    #                 import ipdb; ipdb.set_trace()
+    #                 if (
+    #                     graph.nodes[node1].get("code")
+    #                     and not graph.nodes[node2].get("code")
+    #                 ) or (
+    #                     graph.nodes[node2].get("code")
+    #                     and not graph.nodes[node1].get("code")
+    #                 ):
+    #                     # Choose the more qualified name (with more dots)
+    #                     primary = (
+    #                         node1 if node1.count(".") >= node2.count(".") else node2
+    #                     )
+    #                     secondary = node2 if primary == node1 else node1
 
-                        # Merge attributes
-                        for attr, value in graph.nodes[secondary].items():
-                            if (
-                                attr == "code"
-                                and value
-                                and not graph.nodes[primary].get("code")
-                            ):
-                                graph.nodes[primary]["code"] = value
-                            elif value and (
-                                attr not in graph.nodes[primary]
-                                or not graph.nodes[primary][attr]
-                            ):
-                                graph.nodes[primary][attr] = value
+    #                     # Merge attributes
+    #                     for attr, value in graph.nodes[secondary].items():
+    #                         if (
+    #                             attr == "code"
+    #                             and value
+    #                             and not graph.nodes[primary].get("code")
+    #                         ):
+    #                             graph.nodes[primary]["code"] = value
+    #                         elif value and (
+    #                             attr not in graph.nodes[primary]
+    #                             or not graph.nodes[primary][attr]
+    #                         ):
+    #                             graph.nodes[primary][attr] = value
 
-                        # Redirect edges and remove the duplicate
-                        _redirect_edges_and_remove(graph, secondary, primary)
+    #                     # Redirect edges and remove the duplicate
+    #                     _redirect_edges_and_remove(graph, secondary, primary)
 
     return graph
 
@@ -129,13 +133,13 @@ def _redirect_edges_and_remove(graph, node_id, primary_node):
     """Helper function to redirect edges and remove a node."""
     # Redirect incoming edges
     for pred in list(graph.predecessors(node_id)):
-        for _, data in graph.get_edge_data(pred, node_id).items():
-            graph.add_edge(pred, primary_node, **data)
+        for type_, data in graph.get_edge_data(pred, node_id).items():
+            graph.add_edge(pred, primary_node, type=type_)
 
     # Redirect outgoing edges
     for succ in list(graph.successors(node_id)):
-        for _, data in graph.get_edge_data(node_id, succ).items():
-            graph.add_edge(primary_node, succ, **data)
+        for type_, data in graph.get_edge_data(node_id, succ).items():
+            graph.add_edge(primary_node, succ, type=type_)
 
     # Remove the duplicate node
     graph.remove_node(node_id)
@@ -508,10 +512,15 @@ def analyze_codebase(project_path):
                                     break
 
                             if existing_node:
-                                # Use the existing node instead
+                                # Use the existing node and update its attributes
                                 std_ref_name = existing_node
                                 graph.nodes[existing_node]["code"] = context.source
                                 graph.nodes[existing_node]["depth"] = context.depth
+                                # Update any other attributes that might be relevant
+                                if "type" in context.__dict__ and not graph.nodes[
+                                    existing_node
+                                ].get("type"):
+                                    graph.nodes[existing_node]["type"] = context.type
                             elif std_ref_name not in graph.nodes():
                                 # Add as a new node
                                 graph.add_node(
@@ -523,11 +532,17 @@ def analyze_codebase(project_path):
                                     depth=context.depth,
                                 )
                             else:
+                                # TODO -- maybe unnecessary
                                 # Update existing node
                                 graph.nodes[std_ref_name]["code"] = context.source
                                 graph.nodes[std_ref_name]["depth"] = context.depth
+        except SyntaxError as e:
+            print(f"Syntax error in file {file_path}: {e}")
+        except FileNotFoundError:
+            print(f"File not found: {file_path}")
         except Exception as e:  # pylint: disable=broad-exception-caught
             print(f"Error processing file {file_path}: {e}")
+            traceback.print_exc()  # Print full traceback for debugging
 
     # 4. Annotate graph with interface information from the API extractor
     for module_name, module_info in package_api.get("modules", {}).items():
@@ -562,9 +577,7 @@ def analyze_codebase(project_path):
 
         # Add function information
         for func_name, func_info in module_info.get("functions", {}).items():
-            full_name = standardize_node_id(
-                func_name, module_name
-            )  # f"{module_name}.{func_name}"
+            full_name = standardize_node_id(func_name, module_name)
             if full_name in graph.nodes():
                 graph.nodes[full_name]["is_public_api"] = True
                 graph.nodes[full_name]["docstring"] = func_info.get("docstring", "")
@@ -572,9 +585,7 @@ def analyze_codebase(project_path):
 
         # Add variable information
         for var_name, var_info in module_info.get("variables", {}).items():
-            full_name = standardize_node_id(
-                var_name, module_name
-            )  # f"{module_name}.{var_name}"
+            full_name = standardize_node_id(var_name, module_name)
             if full_name in graph.nodes():
                 graph.nodes[full_name]["is_public_api"] = True
                 graph.nodes[full_name]["type"] = var_info.get("type", "unknown")
@@ -598,9 +609,7 @@ def analyze_codebase(project_path):
             for subpkg_name, subpkg_info in pkg_info.get("packages", {}).items():
                 new_prefix = f"{prefix}.{subpkg_name}" if prefix else subpkg_name
                 # pylint: disable=cell-var-from-loop
-                process_package(
-                    subpkg_info, new_prefix
-                )
+                process_package(subpkg_info, new_prefix)
 
         process_package(package_info, package_name)
     graph = merge_duplicate_nodes(graph)

@@ -348,11 +348,26 @@ def expand_context(
     start_line: int,
     end_line: int,
     max_depth: int = 2,
-    include_functions=True,
-    include_classes=True,
-    include_variables=True,
+    include_functions: bool = True,
+    include_classes: bool = True,
+    include_variables: bool = True,
 ) -> Dict[str, CodeContext]:
-    """Expand context for references in the selected text range."""
+    """
+    Expand context for references in the selected text range.
+    
+    Args:
+        file_path: Path to the file containing the code
+        start_line: Starting line number (1-indexed)
+        end_line: Ending line number (inclusive)
+        max_depth: Maximum recursion depth for expanding references
+        include_functions: Whether to include function definitions
+        include_classes: Whether to include class definitions
+        include_variables: Whether to include variable definitions
+        
+    Returns:
+        Dictionary mapping reference names to their CodeContext objects
+    """
+
     # Extract references from the selected range
     selected_refs = extract_references_from_range(file_path, start_line, end_line)
 
@@ -437,9 +452,7 @@ def expand_to_markdown(
             refs = f"References from depth {depth-1}"
             if depth == 1:
                 refs = "Direct references"
-            output_lines.append(
-                f"## Depth {depth}: {refs}"
-            )
+            output_lines.append(f"## Depth {depth}: {refs}")
             output_lines.append("")
 
         # Add item header with type and name
