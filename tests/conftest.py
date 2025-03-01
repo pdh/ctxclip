@@ -1,7 +1,9 @@
-import pytest
+"""conftest"""
+
 import os
 import tempfile
 import shutil
+import pytest
 
 SAMPLE_CODE = """
 def sample_function(x):
@@ -52,7 +54,7 @@ def main_function():
     result = helper_function(model)
     return result
 """
-    with open(os.path.join(package_dir, "main.py"), "w") as f:
+    with open(os.path.join(package_dir, "main.py"), "w", encoding="utf-8") as f:
         f.write(main_content)
 
     # Create utils.py
@@ -63,7 +65,7 @@ def helper_function(data):
 def process_data(data):
     return data.get_value() * 2
 """
-    with open(os.path.join(package_dir, "utils.py"), "w") as f:
+    with open(os.path.join(package_dir, "utils.py"), "w", encoding="utf-8") as f:
         f.write(utils_content)
 
     # Create models.py
@@ -75,7 +77,7 @@ class DataModel:
     def get_value(self):
         return len(self.value)
 """
-    with open(os.path.join(package_dir, "models.py"), "w") as f:
+    with open(os.path.join(package_dir, "models.py"), "w", encoding="utf-8") as f:
         f.write(models_content)
 
     yield package_dir

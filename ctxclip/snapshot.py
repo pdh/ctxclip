@@ -1,3 +1,5 @@
+"""snapshot debugger"""
+
 import inspect
 import traceback
 import pickle
@@ -11,6 +13,8 @@ import re
 
 
 class DebugSnapshot:
+    """a non-interrupting debug snapshot"""
+
     def __init__(self, snapshot_dir="debug_snapshots"):
         self.snapshot_dir = snapshot_dir
         if not os.path.exists(snapshot_dir):
@@ -67,7 +71,7 @@ class DebugSnapshot:
                 # Test if object is picklable
                 pickle.dumps(value)
                 filtered[key] = value
-            except:
+            except pickle.PicklingError:
                 filtered[key] = f"<Unpicklable object of type {type(value).__name__}>"
         return filtered
 
@@ -81,12 +85,13 @@ class DebugSnapshot:
     @staticmethod
     def print_snapshot(snapshot_data):
         """Print the contents of a snapshot in a readable format"""
+        fname = snapshot_data["filename"]
+        lineno = snapshot_data["lineno"]
+        function = snapshot_data["function"]
         print("\n" + "=" * 50)
         print(f"Debug Snapshot: {snapshot_data.get('label', 'Unnamed')}")
         print(f"Captured at: {snapshot_data['timestamp']}")
-        print(
-            f"Location: {snapshot_data['filename']}:{snapshot_data['lineno']} in {snapshot_data['function']}"
-        )
+        print(f"Location: {fname}:{lineno} in {function}")
 
         print("\nCall Stack:")
         for line in snapshot_data["stack_trace"]:
@@ -109,6 +114,8 @@ snapshot_debugger = DebugSnapshot()
 
 
 def create_snapshot_cli():
+    """create snapshot cli"""
+    # TODO use pattern from other modules
     parser = argparse.ArgumentParser(
         description="Capture a debug snapshot at a specific line in a Python file"
     )
@@ -144,13 +151,13 @@ def create_snapshot_cli():
     try:
         # Run the modified file
         cmd = [sys.executable, temp_file] + args.args
-        result = subprocess.run(cmd, capture_output=True, text=True)
+        result = subprocess.run(cmd, capture_output=True, text=True, check=False)
 
         # Extract the snapshot file path from the output
         snapshot_path = extract_snapshot_path(result.stdout)
 
         if result.returncode != 0:
-            print(f"Error running the script:", file=sys.stderr)
+            print("Error running the script:", file=sys.stderr)
             print(result.stderr, file=sys.stderr)
             sys.exit(1)
 
@@ -159,11 +166,10 @@ def create_snapshot_cli():
             return snapshot_path
         else:
             print(
-                "Warning: Snapshot may not have been captured. Check if the specified line was executed."
+                "Warning: Snapshot may not have been captured."
+                " Check if the specified line was executed."
             )
             print(result.stdout)
-    except Exception as e:
-        print("got exception", e)
     finally:
         # Clean up the temporary file
         try:
@@ -173,6 +179,7 @@ def create_snapshot_cli():
 
 
 def inject_snapshot_code(file_path, line_num, label=None, output_dir="debug_snapshots"):
+    """injects the snapshot code to file_path:line_num"""
     # TODO we can make this cleaner by isolating the full debugsnapshot source in it's own file
     debugger_code = "\n\n".join(
         [
@@ -191,7 +198,7 @@ def inject_snapshot_code(file_path, line_num, label=None, output_dir="debug_snap
         ]
     )
     # Read the original file
-    with open(file_path, "r") as f:
+    with open(file_path, "r", encoding="utf-8") as f:
         lines = f.readlines()
 
     # Determine indentation of the target line
@@ -232,14 +239,14 @@ def inject_snapshot_code(file_path, line_num, label=None, output_dir="debug_snap
     os.close(temp_fd)
 
     # Combine the debugger code with the modified content
-    with open(temp_path, "w") as f:
+    with open(temp_path, "w", encoding="utf-8") as f:
         f.write(debugger_code + "\n" + "".join(lines))
 
     return temp_path
 
 
 def extract_snapshot_path(output):
-    # Extract the snapshot file path from the output
+    """Extract the snapshot file path from the output"""
     match = re.search(r"DEBUG_SNAPSHOT_PATH: (.+)$", output, re.MULTILINE)
     if match:
         return match.group(1).strip()

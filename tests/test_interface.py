@@ -1,18 +1,19 @@
+"""api doc gen test"""
+
 import ast
 import os
 import tempfile
 from pathlib import Path
-import pytest
 from ctxclip import (
     APIExtractor,
     extract_module_api,
     extract_package_api,
 )
-from ctxclip.interface import  _generate_module_markdown
+from ctxclip.interface import _generate_module_markdown
 
 
-# Test simple class extraction
 def test_class_extraction():
+    """test simple class extract"""
     code = """
 class MyClass:
     \"\"\"This is a test class.\"\"\"
@@ -29,7 +30,7 @@ class MyClass:
     tree = ast.parse(code)
     extractor = APIExtractor(convert_to_md=False)
     extractor.visit(tree)
-    
+
     assert "MyClass" in extractor.api["classes"]
     assert extractor.api["classes"]["MyClass"]["docstring"] == "This is a test class."
     assert "__init__" in extractor.api["classes"]["MyClass"]["methods"]
@@ -40,8 +41,8 @@ class MyClass:
     )
 
 
-# Test function extraction
 def test_function_extraction():
+    """test basic function extract"""
     code = """
 def add(a: int, b: int = 0) -> int:
     \"\"\"Add two numbers.\"\"\"
@@ -62,8 +63,8 @@ async def fetch_data(url: str):
     assert "b: int=0" in extractor.api["functions"]["add"]["signature"]
 
 
-# Test variable extraction
 def test_variable_extraction():
+    """test basic variable extract"""
     code = """
 VERSION = '1.0.0'
 MAX_SIZE: int = 100
@@ -83,8 +84,8 @@ CONSTANTS = {
     assert extractor.api["variables"]["MAX_SIZE"]["type"] == "int"
 
 
-# Test import extraction
 def test_import_extraction():
+    """test import extract"""
     code = """
 import os
 import sys as system
@@ -103,8 +104,8 @@ from typing import List, Dict, Optional as Opt
     assert extractor.api["imports"]["system"]["module"] == "sys"
 
 
-# Test private member exclusion
 def test_private_member_exclusion():
+    """test private member exclusion"""
     code = """
 class MyClass:
     def public_method(self):
@@ -126,8 +127,8 @@ _PRIVATE_VAR = 2
     assert "_PRIVATE_VAR" not in extractor.api["variables"]
 
 
-# Test module extraction from file
 def test_extract_module_api():
+    """test module extract from file"""
     with tempfile.NamedTemporaryFile(suffix=".py", mode="w+", delete=False) as f:
         f.write(
             """
@@ -152,8 +153,8 @@ def test_function():
             os.unlink(f.name)
 
 
-# Test markdown generation
 def test_markdown_generation():
+    """test markdown gen"""
     api = {
         "docstring": "Test module.",
         "classes": {
@@ -196,18 +197,18 @@ def test_markdown_generation():
     assert "A test function." in md
 
 
-# Test package extraction
 def test_extract_package_api():
+    """test package extract"""
     with tempfile.TemporaryDirectory() as tmpdir:
         pkg_dir = Path(tmpdir) / "testpkg"
         pkg_dir.mkdir()
 
         # Create __init__.py
-        with open(pkg_dir / "__init__.py", "w") as f:
+        with open(pkg_dir / "__init__.py", "w", encoding="utf-8") as f:
             f.write('"""Test package."""\n\nVERSION = "1.0.0"\n')
 
         # Create a module
-        with open(pkg_dir / "module.py", "w") as f:
+        with open(pkg_dir / "module.py", "w", encoding="utf-8") as f:
             f.write(
                 '"""Test module."""\n\ndef test_func():\n    """Test function."""\n    pass\n'
             )
@@ -215,7 +216,7 @@ def test_extract_package_api():
         # Create a subpackage
         subpkg_dir = pkg_dir / "subpkg"
         subpkg_dir.mkdir()
-        with open(subpkg_dir / "__init__.py", "w") as f:
+        with open(subpkg_dir / "__init__.py", "w", encoding="utf-8") as f:
             f.write('"""Test subpackage."""\n')
 
         # Extract API
