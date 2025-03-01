@@ -1,5 +1,6 @@
 """ctxtc package interface doc gen
 """
+
 import ast
 import argparse
 from pathlib import Path
@@ -9,6 +10,7 @@ import rst2gfm
 
 class APIExtractor(ast.NodeVisitor):
     """AST visitor that extracts the public API from Python modules."""
+
     # pylint: disable=missing-docstring disable=invalid-name
 
     def __init__(self, convert_to_md=False):
@@ -436,6 +438,7 @@ def generate_markdown(api: Dict[str, Any], name: str, is_package: bool = True) -
 
     return md
 
+
 # (module_name)
 # pylint: disable=unused-argument
 def _generate_module_markdown(api: Dict[str, Any], module_name: str) -> str:
@@ -539,7 +542,7 @@ def _generate_module_markdown(api: Dict[str, Any], module_name: str) -> str:
         md += "### Imports\n\n"
 
         # (import_name)
-        #pylint: disable=unused-variable
+        # pylint: disable=unused-variable
         for import_name, import_info in sorted(api["imports"].items()):
             if import_info.get("alias"):
                 md += f"- `{import_info['module']} as {import_info['alias']}`\n"

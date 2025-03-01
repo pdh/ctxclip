@@ -1,3 +1,6 @@
+"""test expand context"""
+
+# pylint: disable=unused-argument
 import ast
 import os
 import tempfile
@@ -95,25 +98,22 @@ def test_filtering_variables_only(sample_file):
     )
     collector.visit(tree)
 
-    # Should include sample_variable and possibly other variables
     assert "sample_function" not in collector.definitions
     assert "SampleClass" not in collector.definitions
     assert "sample_variable" in collector.definitions
 
-    # The test expects 1 but we're finding 3, likely including function parameters or class attributes
-    # Let's adjust our expectation
     assert len(collector.definitions) == 3
 
 
 def test_extract_references_from_range(sample_file):
     """Test extracting references from a specific line range."""
     # Print the content of the file for debugging
-    with open(sample_file, "r") as f:
+    with open(sample_file, "r", encoding="utf-8") as f:
         content = f.read()
         print(f"File content:\n{content}")
 
     # Find the exact line numbers by inspecting the file
-    with open(sample_file, "r") as f:
+    with open(sample_file, "r", encoding="utf-8") as f:
         lines = f.readlines()
         for i, line in enumerate(lines):
             print(f"Line {i+1}: {line.strip()}")
