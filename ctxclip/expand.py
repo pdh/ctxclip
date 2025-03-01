@@ -354,7 +354,7 @@ def expand_context(
 ) -> Dict[str, CodeContext]:
     """
     Expand context for references in the selected text range.
-    
+
     Args:
         file_path: Path to the file containing the code
         start_line: Starting line number (1-indexed)
@@ -363,7 +363,7 @@ def expand_context(
         include_functions: Whether to include function definitions
         include_classes: Whether to include class definitions
         include_variables: Whether to include variable definitions
-        
+
     Returns:
         Dictionary mapping reference names to their CodeContext objects
     """
