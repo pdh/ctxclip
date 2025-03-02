@@ -1,0 +1,1644 @@
+{
+  "nodes": [
+    {
+      "id": "graph",
+      "type": "module",
+      "parent": "",
+      "path": "/Users/ph/Documents/ctxclip/ctxclip/graph.py",
+      "line_start": "",
+      "line_end": "",
+      "code": "# From /Users/ph/Documents/ctxclip/ctxclip/graph.py\n    graph = merge_duplicate_nodes(graph)",
+      "depth": 1,
+      "docstring": "",
+      "signature": "",
+      "is_public_api": "",
+      "methods": ""
+    },
+    {
+      "id": "interface",
+      "type": "module",
+      "parent": "",
+      "path": "/Users/ph/Documents/ctxclip/ctxclip/interface.py",
+      "line_start": "",
+      "line_end": "",
+      "code": "",
+      "depth": "",
+      "docstring": "",
+      "signature": "",
+      "is_public_api": "",
+      "methods": ""
+    },
+    {
+      "id": "__init__",
+      "type": "module",
+      "parent": "",
+      "path": "/Users/ph/Documents/ctxclip/ctxclip/__init__.py",
+      "line_start": "",
+      "line_end": "",
+      "code": "",
+      "depth": "",
+      "docstring": "",
+      "signature": "",
+      "is_public_api": "",
+      "methods": ""
+    },
+    {
+      "id": "main",
+      "type": "module",
+      "parent": "",
+      "path": "/Users/ph/Documents/ctxclip/ctxclip/main.py",
+      "line_start": "",
+      "line_end": "",
+      "code": "",
+      "depth": "",
+      "docstring": "",
+      "signature": "",
+      "is_public_api": "",
+      "methods": ""
+    },
+    {
+      "id": "expand",
+      "type": "module",
+      "parent": "",
+      "path": "/Users/ph/Documents/ctxclip/ctxclip/expand.py",
+      "line_start": "",
+      "line_end": "",
+      "code": "# From /Users/ph/Documents/ctxclip/ctxclip/main.py\n    expand = subparsers.add_parser(\"expand\")",
+      "depth": 1,
+      "docstring": "",
+      "signature": "",
+      "is_public_api": "",
+      "methods": ""
+    },
+    {
+      "id": "snapshot",
+      "type": "module",
+      "parent": "",
+      "path": "/Users/ph/Documents/ctxclip/ctxclip/snapshot.py",
+      "line_start": "",
+      "line_end": "",
+      "code": "",
+      "depth": "",
+      "docstring": "",
+      "signature": "",
+      "is_public_api": "",
+      "methods": ""
+    },
+    {
+      "id": "pathlib.Path",
+      "type": "object",
+      "parent": "pathlib",
+      "path": "",
+      "line_start": "",
+      "line_end": "",
+      "code": "",
+      "depth": "",
+      "docstring": "",
+      "signature": "",
+      "is_public_api": "",
+      "methods": ""
+    },
+    {
+      "id": "ctxclip.interface",
+      "type": "object",
+      "parent": "ctxclip",
+      "path": "",
+      "line_start": "",
+      "line_end": "",
+      "code": "",
+      "depth": "",
+      "docstring": "",
+      "signature": "",
+      "is_public_api": "",
+      "methods": ""
+    },
+    {
+      "id": "ctxclip.expand",
+      "type": "object",
+      "parent": "ctxclip",
+      "path": "",
+      "line_start": "",
+      "line_end": "",
+      "code": "",
+      "depth": "",
+      "docstring": "",
+      "signature": "",
+      "is_public_api": "",
+      "methods": ""
+    },
+    {
+      "id": "graph.standardize_node_id",
+      "type": "function",
+      "parent": "graph",
+      "path": "/Users/ph/Documents/ctxclip/ctxclip/graph.py",
+      "line_start": 16,
+      "line_end": 24,
+      "code": "# From /Users/ph/Documents/ctxclip/ctxclip/graph.py\ndef standardize_node_id(name: str, module_context: str = None):\n    \"\"\"Create a standardized node ID to prevent duplication.\"\"\"\n    # If it's already a fully qualified name (contains a dot)\n    if \".\" in name:\n        return name\n    # Otherwise, qualify it with the module context\n    if module_context:\n        return f\"{module_context}.{name}\"\n    return name",
+      "depth": 1,
+      "docstring": "Create a standardized node ID to prevent duplication.",
+      "signature": "(name: str, module_context: str=None)",
+      "is_public_api": true,
+      "methods": ""
+    },
+    {
+      "id": "graph.merge_duplicate_nodes",
+      "type": "function",
+      "parent": "graph",
+      "path": "/Users/ph/Documents/ctxclip/ctxclip/graph.py",
+      "line_start": 27,
+      "line_end": 127,
+      "code": "# From /Users/ph/Documents/ctxclip/ctxclip/graph.py\ndef merge_duplicate_nodes(graph):\n    \"\"\"merge duplicate graph nodes\"\"\"\n    # First approach: merge by path and line numbers\n    canonical_map = {}\n\n    # First pass: identify duplicates based on path and line numbers\n    for node_id in list(graph.nodes()):\n        node_data = graph.nodes[node_id]\n        if (\n            \"path\" in node_data\n            and \"line_start\" in node_data\n            and \"line_end\" in node_data\n        ):\n            canonical_key = (\n                f\"{node_data['path']}:{node_data['line_start']}-{node_data['line_end']}\"\n            )\n            if canonical_key not in canonical_map:\n                canonical_map[canonical_key] = []\n            canonical_map[canonical_key].append(node_id)\n\n    # Second pass: merge duplicates by path/line\n    for canonical_key, node_ids in canonical_map.items():\n        if len(node_ids) > 1:\n            # Choose the most qualified name as the primary node\n            primary_node = max(node_ids, key=lambda x: x.count(\".\"))\n\n            # Merge attributes and redirect edges\n            for node_id in node_ids:\n                if node_id != primary_node:\n                    # Merge attributes\n                    for attr, value in graph.nodes[node_id].items():\n                        if (\n                            attr == \"code\"\n                            and value\n                            and (\n                                not graph.nodes[primary_node].get(\"code\")\n                                or graph.nodes[primary_node][\"code\"] == \"\"\n                            )\n                        ):\n                            graph.nodes[primary_node][\"code\"] = value\n                        elif value and (\n                            attr not in graph.nodes[primary_node]\n                            or not graph.nodes[primary_node][attr]\n                        ):\n                            graph.nodes[primary_node][attr] = value\n\n                    # Redirect edges and remove the duplicate\n                    _redirect_edges_and_remove(graph, node_id, primary_node)\n\n    # Second approach: merge by name (for nodes that might have different path info)\n    name_map = {}\n\n    # Group nodes by their simple name (last part after the dot)\n    for node_id in list(graph.nodes()):\n        if \".\" in node_id:\n            simple_name = node_id.split(\".\")[-1]\n            if simple_name not in name_map:\n                name_map[simple_name] = []\n            name_map[simple_name].append(node_id)\n\n    # # Merge nodes with the same simple name\n    # for simple_name, node_ids in name_map.items():\n    #     if len(node_ids) > 1:\n    #         # Check if these nodes might be duplicates by comparing code or other attributes\n    #         for i in range(len(node_ids)):\n    #             for j in range(i + 1, len(node_ids)):\n    #                 # node2 = node_ids[j]\n    #                 node1, node2 = node_ids[i], node_ids[j]\n    #                 # If one has code and the other doesn't, they might be duplicates\n    #                 import ipdb; ipdb.set_trace()\n    #                 if (\n    #                     graph.nodes[node1].get(\"code\")\n    #                     and not graph.nodes[node2].get(\"code\")\n    #                 ) or (\n    #                     graph.nodes[node2].get(\"code\")\n    #                     and not graph.nodes[node1].get(\"code\")\n    #                 ):\n    #                     # Choose the more qualified name (with more dots)\n    #                     primary = (\n    #                         node1 if node1.count(\".\") >= node2.count(\".\") else node2\n    #                     )\n    #                     secondary = node2 if primary == node1 else node1\n\n    #                     # Merge attributes\n    #                     for attr, value in graph.nodes[secondary].items():\n    #                         if (\n    #                             attr == \"code\"\n    #                             and value\n    #                             and not graph.nodes[primary].get(\"code\")\n    #                         ):\n    #                             graph.nodes[primary][\"code\"] = value\n    #                         elif value and (\n    #                             attr not in graph.nodes[primary]\n    #                             or not graph.nodes[primary][attr]\n    #                         ):\n    #                             graph.nodes[primary][attr] = value\n\n    #                     # Redirect edges and remove the duplicate\n    #                     _redirect_edges_and_remove(graph, secondary, primary)\n\n    return graph",
+      "depth": 1,
+      "docstring": "merge duplicate graph nodes",
+      "signature": "(graph)",
+      "is_public_api": true,
+      "methods": ""
+    },
+    {
+      "id": "graph._redirect_edges_and_remove",
+      "type": "function",
+      "parent": "graph",
+      "path": "/Users/ph/Documents/ctxclip/ctxclip/graph.py",
+      "line_start": 130,
+      "line_end": 143,
+      "code": "# From /Users/ph/Documents/ctxclip/ctxclip/graph.py\ndef _redirect_edges_and_remove(graph, node_id, primary_node):\n    \"\"\"Helper function to redirect edges and remove a node.\"\"\"\n    # Redirect incoming edges\n    for pred in list(graph.predecessors(node_id)):\n        for type_, data in graph.get_edge_data(pred, node_id).items():\n            graph.add_edge(pred, primary_node, type=type_)\n\n    # Redirect outgoing edges\n    for succ in list(graph.successors(node_id)):\n        for type_, data in graph.get_edge_data(node_id, succ).items():\n            graph.add_edge(primary_node, succ, type=type_)\n\n    # Remove the duplicate node\n    graph.remove_node(node_id)",
+      "depth": 1,
+      "docstring": "",
+      "signature": "",
+      "is_public_api": "",
+      "methods": ""
+    },
+    {
+      "id": "graph.DependencyGraphGenerator",
+      "type": "class",
+      "parent": "graph",
+      "path": "/Users/ph/Documents/ctxclip/ctxclip/graph.py",
+      "line_start": 146,
+      "line_end": 448,
+      "code": "# From /Users/ph/Documents/ctxclip/ctxclip/graph.py\nclass DependencyGraphGenerator:\n    \"\"\"dependency graph gen\"\"\"\n\n    def __init__(self):\n        self.graph = nx.DiGraph()\n        self.module_map = {}  # Maps module names to file paths\n        self.name_registry = {}  # Maps various forms of names to canonical IDs\n\n    def get_canonical_id(self, name, module_context=None):\n        \"\"\"return canonical id\"\"\"\n        # Try the name as is\n        if name in self.name_registry:\n            return self.name_registry[name]\n\n        # Try with module context\n        if module_context:\n            qualified_name = f\"{module_context}.{name}\"\n            if qualified_name in self.name_registry:\n                return self.name_registry[qualified_name]\n\n        # Try looking for the unqualified name if this is a qualified name\n        if \".\" in name:\n            simple_name = name.split(\".\")[-1]\n            if simple_name in self.name_registry:\n                # Check if they point to the same file and line\n                simple_node = self.graph.nodes.get(self.name_registry[simple_name], {})\n                qualified_node = self.graph.nodes.get(name, {})\n\n                if simple_node.get(\"path\") == qualified_node.get(\n                    \"path\"\n                ) and simple_node.get(\"line_start\") == qualified_node.get(\"line_start\"):\n                    return self.name_registry[simple_name]\n\n        # If not found, create a new canonical ID\n        canonical_id = standardize_node_id(name, module_context)\n        self.name_registry[name] = canonical_id\n        if module_context:\n            self.name_registry[f\"{module_context}.{name}\"] = canonical_id\n\n        # Also register the simple name if this is a qualified name\n        if \".\" in canonical_id:\n            simple_name = canonical_id.split(\".\")[-1]\n            self.name_registry[simple_name] = canonical_id\n\n        return canonical_id\n\n    def analyze_project(self, project_path: str) -> nx.DiGraph:\n        \"\"\"Analyze a Python project and build a dependency graph.\"\"\"\n        project_path = Path(project_path).resolve()\n\n        # First pass: collect all modules\n        for root, _, files in os.walk(project_path):\n            for file in files:\n                if file.endswith(\".py\"):\n                    file_path = Path(root) / file\n                    relative_path = file_path.relative_to(project_path)\n                    module_name = str(relative_path.with_suffix(\"\")).replace(\"/\", \".\")\n                    self.module_map[module_name] = str(file_path)\n                    self.graph.add_node(module_name, type=\"module\", path=str(file_path))\n\n        # Second pass: analyze imports and relationships\n        for module_name, file_path in self.module_map.items():\n            self._analyze_file(module_name, file_path)\n\n        self._post_process_node_types()\n\n        return self.graph\n\n    def _analyze_file(self, module_name: str, file_path: str) -> None:\n        \"\"\"Analyze a single Python file for dependencies.\"\"\"\n        try:\n            with open(file_path, \"r\", encoding=\"utf-8\") as f:\n                content = f.read()\n\n            tree = ast.parse(content)\n\n            # Track imported names and their fully qualified names\n            imported_names = {}\n\n            # Analyze imports first to build the name mapping\n            for node in ast.walk(tree):\n                if isinstance(node, ast.Import):\n                    for name in node.names:\n                        imported_name = name.asname or name.name\n                        canonical_id = self.get_canonical_id(name.name)\n                        self.name_registry[imported_name] = canonical_id\n                        if name.name in self.module_map:\n                            self.graph.add_edge(module_name, name.name, type=\"import\")\n\n                elif isinstance(node, ast.ImportFrom):\n                    if node.module in self.module_map:\n                        self.graph.add_edge(\n                            module_name, node.module, type=\"import_from\"\n                        )\n\n                    for name in node.names:\n                        if node.module:\n                            imported_name = name.asname or name.name\n                            qualified_name = f\"{node.module}.{name.name}\"\n                            imported_names[imported_name] = qualified_name\n\n                            node_id = standardize_node_id(qualified_name)\n                            self.graph.add_node(\n                                node_id, type=\"object\", parent=node.module\n                            )\n                            self.graph.add_edge(\n                                module_name, node_id, type=\"import_object\"\n                            )\n\n            # Analyze classes and functions\n            for node in ast.iter_child_nodes(tree):\n                if isinstance(node, ast.ClassDef):\n                    class_name = standardize_node_id(node.name, module_name)\n                    # Check if node already exists (from imports) and update it\n                    if class_name in self.graph:\n                        self.graph.nodes[class_name][\"type\"] = \"class\"\n                        self.graph.nodes[class_name][\"path\"] = file_path\n                        # Also update line numbers if needed\n                        self.graph.nodes[class_name][\"line_start\"] = node.lineno\n                        self.graph.nodes[class_name][\"line_end\"] = node.end_lineno\n                    else:\n                        self.graph.add_node(\n                            class_name,\n                            type=\"class\",\n                            path=file_path,\n                            parent=module_name,\n                            line_start=node.lineno,\n                            line_end=node.end_lineno,\n                        )\n                    self.graph.add_edge(module_name, class_name, type=\"defines\")\n\n                    # Check for inheritance with improved name resolution\n                    for base in node.bases:\n                        if isinstance(base, ast.Name):\n                            base_name = base.id\n                            # Check if it's an imported name\n                            if base_name in imported_names:\n                                qualified_base = imported_names[base_name]\n                                # Standardize the base class name\n                                std_qualified_base = standardize_node_id(qualified_base)\n                                if std_qualified_base in self.graph.nodes():\n                                    self.graph.add_edge(\n                                        class_name, std_qualified_base, type=\"inherits\"\n                                    )\n                                else:\n                                    # Try to find by suffix matching if not found directly\n                                    for potential_match in self.graph.nodes():\n                                        if potential_match.endswith(\n                                            f\".{qualified_base}\"\n                                        ):\n                                            self.graph.add_edge(\n                                                class_name,\n                                                potential_match,\n                                                type=\"inherits\",\n                                            )\n                                            break\n                            # Also try the simple name in case it's defined in the same module\n                            local_base = standardize_node_id(base_name, module_name)\n                            if local_base in self.graph:\n                                self.graph.add_edge(\n                                    class_name, local_base, type=\"inherits\"\n                                )\n                elif isinstance(node, ast.FunctionDef):\n                    func_name = standardize_node_id(node.name, module_name)\n                    if func_name in self.graph:\n                        self.graph.nodes[func_name][\"type\"] = \"function\"\n                        # Update line numbers if not present\n                        if \"line_start\" not in self.graph.nodes[func_name]:\n                            self.graph.nodes[func_name][\"line_start\"] = node.lineno\n                            self.graph.nodes[func_name][\"line_end\"] = node.end_lineno\n                            self.graph.nodes[func_name][\"path\"] = file_path\n                    else:\n                        self.graph.add_node(\n                            func_name,\n                            type=\"function\",\n                            path=file_path,\n                            parent=module_name,\n                            line_start=node.lineno,\n                            line_end=node.end_lineno,\n                        )\n                    self.graph.add_edge(module_name, func_name, type=\"defines\")\n\n                    # Analyze function calls within the function\n                    for subnode in ast.walk(node):\n                        if isinstance(subnode, ast.Call) and isinstance(\n                            subnode.func, ast.Name\n                        ):\n                            called_func = subnode.func.id\n                            # Check if it's an imported name\n                            if called_func in imported_names:\n                                qualified_func = imported_names[called_func]\n                                std_qualified_func = standardize_node_id(qualified_func)\n                                if std_qualified_func in self.graph.nodes():\n                                    self.graph.add_edge(\n                                        func_name, std_qualified_func, type=\"calls\"\n                                    )\n                                else:\n                                    # Try to find by suffix matching if not found directly\n                                    for potential_match in self.graph.nodes():\n                                        if potential_match.endswith(\n                                            f\".{qualified_func}\"\n                                        ):\n                                            self.graph.add_edge(\n                                                func_name, potential_match, type=\"calls\"\n                                            )\n                                            break\n                            # Try local function\n                            local_func = standardize_node_id(called_func, module_name)\n                            if local_func in self.graph:\n                                self.graph.add_edge(func_name, local_func, type=\"calls\")\n\n        except Exception as e:  # pylint: disable=broad-exception-caught\n            print(f\"Error analyzing {file_path}: {e}\")\n\n    def _post_process_node_types(self):\n        \"\"\"\n        Post-process the graph to correct node types based on relationships.\n        This ensures that nodes created during import have the correct type.\n        \"\"\"\n        # Find all \"defines\" edges which indicate the true nature of a node\n        defines_edges = [\n            (source, target, data)\n            for source, target, data in self.graph.edges(data=True)\n            if data.get(\"type\") == \"defines\"\n        ]\n\n        # Update node types based on these relationships\n        for source, target, data in defines_edges:\n            target_node = self.graph.nodes[target]\n            # If the node is defined by a module, check what kind of definition it is\n            if self.graph.nodes[source].get(\"type\") == \"module\":\n                # Get the node name (last part of the qualified name)\n                node_name = target.split(\".\")[-1]\n\n                # The target node's name should indicate its type\n                if node_name[0].isupper():  # Class names typically start with uppercase\n                    self.graph.nodes[target][\"type\"] = \"class\"\n                elif \".\" in target and any(\n                    target.endswith(f\".{x}\") for x in [\"__init__\", \"__call__\"]\n                ):\n                    self.graph.nodes[target][\"type\"] = \"method\"\n                elif target_node.get(\"type\") == \"object\":\n                    # If it's currently marked as object but has a defines edge\n                    # it's likely a function\n                    self.graph.nodes[target][\"type\"] = \"function\"\n\n        # Look for inheritance relationships to identify classes\n        inherits_edges = [\n            (source, target, data)\n            for source, target, data in self.graph.edges(data=True)\n            if data.get(\"type\") == \"inherits\"\n        ]\n\n        for source, target, data in inherits_edges:\n            # Both source and target of an inheritance relationship must be classes\n            self.graph.nodes[source][\"type\"] = \"class\"\n            self.graph.nodes[target][\"type\"] = \"class\"\n\n    def export_json(self, output_path: str) -> None:\n        \"\"\"Export the dependency graph to a JSON file.\"\"\"\n        data = nx.node_link_data(self.graph)\n        with open(output_path, \"w\", encoding=\"utf-8\") as f:\n            json.dump(data, f, indent=2)\n\n    def export_dot(self, output_path: str) -> None:\n        \"\"\"Export the dependency graph to a DOT file for visualization with Graphviz.\"\"\"\n        nx.drawing.nx_pydot.write_dot(self.graph, output_path)\n\n    def export_d3_format(self, output_path: str) -> None:\n        \"\"\"Export in a format suitable for D3.js visualization.\"\"\"\n        nodes = []\n        links = []\n\n        for node_id in self.graph.nodes():\n            node_data = self.graph.nodes[node_id]\n            nodes.append(\n                {\n                    \"id\": node_id,\n                    \"type\": node_data.get(\"type\", \"unknown\"),\n                    \"parent\": node_data.get(\"parent\", \"\"),\n                    \"path\": node_data.get(\"path\", \"\"),\n                    \"line_start\": node_data.get(\"line_start\", \"\"),\n                    \"line_end\": node_data.get(\"line_end\", \"\"),\n                    \"code\": node_data.get(\"code\", \"\"),\n                    \"depth\": node_data.get(\"depth\", \"\"),\n                    \"docstring\": node_data.get(\"docstring\", \"\"),\n                    \"signature\": node_data.get(\"signature\", \"\"),\n                    \"is_public_api\": node_data.get(\"is_public_api\", \"\"),\n                    \"methods\": node_data.get(\"methods\", \"\"),\n                }\n            )\n\n        for source, target, data in self.graph.edges(data=True):\n            links.append(\n                {\n                    \"source\": source,\n                    \"target\": target,\n                    \"type\": data.get(\"type\", \"unknown\"),\n                }\n            )\n\n        with open(output_path, \"w\", encoding=\"utf-8\") as f:\n            json.dump({\"nodes\": nodes, \"links\": links}, f, indent=2)",
+      "depth": 1,
+      "docstring": "dependency graph gen",
+      "signature": "",
+      "is_public_api": true,
+      "methods": [
+        "__init__",
+        "get_canonical_id",
+        "analyze_project",
+        "export_json",
+        "export_dot",
+        "export_d3_format"
+      ]
+    },
+    {
+      "id": "graph.analyze_codebase",
+      "type": "function",
+      "parent": "graph",
+      "path": "/Users/ph/Documents/ctxclip/ctxclip/graph.py",
+      "line_start": 452,
+      "line_end": 614,
+      "code": "# From /Users/ph/Documents/ctxclip/ctxclip/graph.py\ndef analyze_codebase(project_path):\n    \"\"\"integrated workflow that gens pub api, expands context, and gens dep graph\"\"\"\n    # pylint: disable=unused-variable\n    # 1. Document public interfaces using the APIExtractor\n    package_api = api.extract_package_api(project_path)\n\n    # 2. Build basic dependency graph\n    graph_generator = DependencyGraphGenerator()\n    graph = graph_generator.analyze_project(project_path)\n\n    # 3. Enhance graph with context expansion\n    package_files = expand.find_package_files(project_path)\n\n    for file_path in package_files:\n        # Get AST and lines for this file\n        try:\n            file_tree, file_lines = expand.parse_file(file_path)\n            # For each node in our graph that has location information\n            for node_id in list(graph.nodes()):\n                node_data = graph.nodes[node_id]\n                if (\n                    node_data.get(\"type\") in [\"function\", \"class\", \"variable\", \"object\"]\n                    and \"path\" in node_data\n                ):\n                    # If this node is from the current file\n                    if (\n                        node_data[\"path\"] == file_path\n                        and \"line_start\" in node_data\n                        and \"line_end\" in node_data\n                    ):\n\n                        # Use the context expander to get deeper insights\n                        expanded_contexts = expand.expand_context(\n                            file_path=file_path,\n                            start_line=node_data[\"line_start\"],\n                            end_line=node_data[\"line_end\"],\n                            max_depth=1,  # Adjust depth as needed\n                            include_functions=True,\n                            include_classes=True,\n                            include_variables=True,\n                        )\n\n                        # Add discovered dependencies to graph\n                        for ref_name, context in expanded_contexts.items():\n                            # Standardize the reference name\n                            std_ref_name = standardize_node_id(ref_name)\n\n                            # Check if a similar node exists with a different ID\n                            existing_node = None\n                            for node_id in graph.nodes():\n                                node_data = graph.nodes[node_id]\n                                if (\n                                    node_data.get(\"path\") == file_path\n                                    and node_data.get(\"line_start\")\n                                    == context.line_start\n                                    and node_data.get(\"line_end\") == context.line_end\n                                ):\n                                    existing_node = node_id\n                                    break\n\n                            if existing_node:\n                                # Use the existing node and update its attributes\n                                std_ref_name = existing_node\n                                graph.nodes[existing_node][\"code\"] = context.source\n                                graph.nodes[existing_node][\"depth\"] = context.depth\n                                # Update any other attributes that might be relevant\n                                if \"type\" in context.__dict__ and not graph.nodes[\n                                    existing_node\n                                ].get(\"type\"):\n                                    graph.nodes[existing_node][\"type\"] = context.type\n                            elif std_ref_name not in graph.nodes():\n                                # Add as a new node\n                                graph.add_node(\n                                    std_ref_name,\n                                    type=context.type,\n                                    line_start=context.line_start,\n                                    line_end=context.line_end,\n                                    code=context.source,\n                                    depth=context.depth,\n                                )\n                            else:\n                                # TODO -- maybe unnecessary\n                                # Update existing node\n                                graph.nodes[std_ref_name][\"code\"] = context.source\n                                graph.nodes[std_ref_name][\"depth\"] = context.depth\n        except SyntaxError as e:\n            print(f\"Syntax error in file {file_path}: {e}\")\n        except FileNotFoundError:\n            print(f\"File not found: {file_path}\")\n        except Exception as e:  # pylint: disable=broad-exception-caught\n            print(f\"Error processing file {file_path}: {e}\")\n            traceback.print_exc()  # Print full traceback for debugging\n\n    # 4. Annotate graph with interface information from the API extractor\n    for module_name, module_info in package_api.get(\"modules\", {}).items():\n        # Add class information\n        for class_name, class_info in module_info.get(\"classes\", {}).items():\n            full_name = standardize_node_id(class_name, module_name)\n            if full_name in graph.nodes():\n                graph.nodes[full_name][\"is_public_api\"] = True\n                graph.nodes[full_name][\"docstring\"] = class_info.get(\"docstring\", \"\")\n                graph.nodes[full_name][\"methods\"] = list(\n                    class_info.get(\"methods\", {}).keys()\n                )\n                graph.nodes[full_name][\"attributes\"] = list(\n                    class_info.get(\"attributes\", {}).keys()\n                )\n                graph.nodes[full_name][\"bases\"] = class_info.get(\"bases\", [])\n\n            # Add method information\n            for method_name, method_info in class_info.get(\"methods\", {}).items():\n                # full_method_name = f\"{module_name}.{class_name}.{method_name}\"\n                full_method_name = standardize_node_id(\n                    f\"{class_name}.{method_name}\", module_name\n                )\n                if full_method_name in graph.nodes():\n                    graph.nodes[full_method_name][\"is_public_api\"] = True\n                    graph.nodes[full_method_name][\"docstring\"] = method_info.get(\n                        \"docstring\", \"\"\n                    )\n                    graph.nodes[full_method_name][\"signature\"] = method_info.get(\n                        \"signature\", \"\"\n                    )\n\n        # Add function information\n        for func_name, func_info in module_info.get(\"functions\", {}).items():\n            full_name = standardize_node_id(func_name, module_name)\n            if full_name in graph.nodes():\n                graph.nodes[full_name][\"is_public_api\"] = True\n                graph.nodes[full_name][\"docstring\"] = func_info.get(\"docstring\", \"\")\n                graph.nodes[full_name][\"signature\"] = func_info.get(\"signature\", \"\")\n\n        # Add variable information\n        for var_name, var_info in module_info.get(\"variables\", {}).items():\n            full_name = standardize_node_id(var_name, module_name)\n            if full_name in graph.nodes():\n                graph.nodes[full_name][\"is_public_api\"] = True\n                graph.nodes[full_name][\"type\"] = var_info.get(\"type\", \"unknown\")\n                graph.nodes[full_name][\"value\"] = var_info.get(\"value\", \"\")\n\n    # Also process subpackages recursively\n    for package_name, package_info in package_api.get(\"packages\", {}).items():\n        # Recursive function to process nested packages\n        def process_package(pkg_info, prefix):\n            for mod_name, mod_info in pkg_info.get(\"modules\", {}).items():\n                full_prefix = f\"{prefix}.{mod_name}\" if prefix else mod_name\n\n                # Process module contents (similar to above)\n                for class_name, class_info in mod_info.get(\"classes\", {}).items():\n                    # Similar processing as above but with updated prefix\n                    pass\n\n                # Process functions and variables similarly\n\n            # Recursively process subpackages\n            for subpkg_name, subpkg_info in pkg_info.get(\"packages\", {}).items():\n                new_prefix = f\"{prefix}.{subpkg_name}\" if prefix else subpkg_name\n                # pylint: disable=cell-var-from-loop\n                process_package(subpkg_info, new_prefix)\n\n        process_package(package_info, package_name)\n    graph = merge_duplicate_nodes(graph)\n    return graph, graph_generator",
+      "depth": 1,
+      "docstring": "integrated workflow that gens pub api, expands context, and gens dep graph",
+      "signature": "(project_path)",
+      "is_public_api": true,
+      "methods": ""
+    },
+    {
+      "id": "graph.arg_parser",
+      "type": "function",
+      "parent": "graph",
+      "path": "/Users/ph/Documents/ctxclip/ctxclip/graph.py",
+      "line_start": 617,
+      "line_end": 635,
+      "code": "# From /Users/ph/Documents/ctxclip/ctxclip/graph.py\ndef arg_parser(parser=None):\n    \"\"\"arg parser\"\"\"\n    if not parser:\n        parser = argparse.ArgumentParser(\n            description=\"Generate a dependency graph for a Python package\",\n        )\n    parser.add_argument(\n        \"package\", help=\"Path to the package or module to generate graph\"\n    )\n    parser.add_argument(\"--output\", \"-o\", help=\"output file\")\n    parser.add_argument(\n        \"--format\",\n        \"-f\",\n        choices=[\"json\", \"dot\", \"d3\"],\n        default=\"d3\",\n        help=\"output file format (json, dot, d3)\",\n    )\n    parser.add_argument(\"--deep\", \"-a\", help=\"combined analysis\")\n    return parser",
+      "depth": 1,
+      "docstring": "arg parser",
+      "signature": "(parser=None)",
+      "is_public_api": true,
+      "methods": ""
+    },
+    {
+      "id": "graph.main",
+      "type": "function",
+      "parent": "graph",
+      "path": "/Users/ph/Documents/ctxclip/ctxclip/graph.py",
+      "line_start": 638,
+      "line_end": 662,
+      "code": "",
+      "depth": "",
+      "docstring": "cli entry",
+      "signature": "(args=None)",
+      "is_public_api": true,
+      "methods": ""
+    },
+    {
+      "id": "typing.Dict",
+      "type": "object",
+      "parent": "typing",
+      "path": "",
+      "line_start": "",
+      "line_end": "",
+      "code": "",
+      "depth": "",
+      "docstring": "",
+      "signature": "",
+      "is_public_api": "",
+      "methods": ""
+    },
+    {
+      "id": "typing.Any",
+      "type": "object",
+      "parent": "typing",
+      "path": "",
+      "line_start": "",
+      "line_end": "",
+      "code": "",
+      "depth": "",
+      "docstring": "",
+      "signature": "",
+      "is_public_api": "",
+      "methods": ""
+    },
+    {
+      "id": "interface.APIExtractor",
+      "type": "class",
+      "parent": "interface",
+      "path": "/Users/ph/Documents/ctxclip/ctxclip/interface.py",
+      "line_start": 10,
+      "line_end": 312,
+      "code": "# From /Users/ph/Documents/ctxclip/ctxclip/interface.py\nclass APIExtractor(ast.NodeVisitor):\n    \"\"\"AST visitor that extracts the public API from Python modules.\"\"\"\n    # pylint: disable=missing-docstring disable=invalid-name\n\n    def __init__(self, convert_to_md=False):\n        self.api = {\n            \"classes\": {},\n            \"functions\": {},\n            \"variables\": {},\n            \"imports\": {},\n        }\n        self.current_class = None\n        self.convert_to_md = convert_to_md\n\n    def visit_ClassDef(self, node):\n        \"\"\"Extract information from class definitions.\"\"\"\n        if node.name.startswith(\"_\"):\n            return\n\n        # Save previous class context if we're nested\n        prev_class = self.current_class\n        self.current_class = node.name\n\n        docstring = ast.get_docstring(node, clean=True) or \"\"\n        if docstring and self.convert_to_md:\n            docstring = rst2gfm.convert_rst_to_md(docstring)\n        class_info = {\n            \"docstring\": docstring,\n            \"methods\": {},\n            \"attributes\": {},\n            \"bases\": [self._format_name(base) for base in node.bases],\n        }\n\n        # Store the class info\n        self.api[\"classes\"][node.name] = class_info\n\n        # Visit all nodes within the class\n        for item in node.body:\n            if isinstance(item, ast.FunctionDef):\n                self.visit_FunctionDef(item)\n            elif isinstance(item, ast.Assign):\n                self._extract_class_attributes(item)\n            elif isinstance(item, ast.AnnAssign):\n                self._extract_class_annotated_attributes(item)\n\n        # Restore previous class context\n        self.current_class = prev_class\n\n    def visit_FunctionDef(self, node):\n        \"\"\"Extract information from function definitions.\"\"\"\n        if node.name.startswith(\"_\") and node.name != \"__init__\":\n            return\n\n        func_info = {\n            \"docstring\": ast.get_docstring(node) or \"\",\n            \"signature\": self._get_function_signature(node),\n            \"decorators\": [self._format_name(d) for d in node.decorator_list],\n        }\n\n        # If we're inside a class, add to methods\n        if self.current_class:\n            self.api[\"classes\"][self.current_class][\"methods\"][node.name] = func_info\n        else:\n            # Otherwise it's a module-level function\n            self.api[\"functions\"][node.name] = func_info\n\n    def visit_AsyncFunctionDef(self, node):\n        \"\"\"Handle async functions the same way as regular functions.\"\"\"\n        self.visit_FunctionDef(node)\n\n    def visit_Assign(self, node):\n        \"\"\"Extract module-level variables.\"\"\"\n        if self.current_class:\n            return\n\n        for target in node.targets:\n            if isinstance(target, ast.Name) and not target.id.startswith(\"_\"):\n                self.api[\"variables\"][target.id] = {\n                    \"type\": \"unknown\",\n                    \"value\": self._get_value_repr(node.value),\n                }\n\n    def visit_AnnAssign(self, node):\n        \"\"\"Extract annotated module-level variables.\"\"\"\n        if self.current_class:\n            return\n\n        if isinstance(node.target, ast.Name) and not node.target.id.startswith(\"_\"):\n            self.api[\"variables\"][node.target.id] = {\n                \"type\": self._format_name(node.annotation),\n                \"value\": self._get_value_repr(node.value) if node.value else \"None\",\n            }\n\n    def visit_Import(self, node):\n        \"\"\"Extract import statements.\"\"\"\n        for name in node.names:\n            if not name.name.startswith(\"_\"):\n                self.api[\"imports\"][name.asname or name.name] = {\n                    \"module\": name.name,\n                    \"alias\": name.asname,\n                }\n\n    def visit_ImportFrom(self, node):\n        \"\"\"Extract from-import statements.\"\"\"\n        if node.module and not node.module.startswith(\"_\"):\n            for name in node.names:\n                if not name.name.startswith(\"_\"):\n                    self.api[\"imports\"][name.asname or name.name] = {\n                        \"module\": f\"{node.module}.{name.name}\",\n                        \"alias\": name.asname,\n                    }\n\n    def _extract_class_attributes(self, node):\n        \"\"\"Extract class attributes from assignment nodes.\"\"\"\n        for target in node.targets:\n            if isinstance(target, ast.Name) and not target.id.startswith(\"_\"):\n                self.api[\"classes\"][self.current_class][\"attributes\"][target.id] = {\n                    \"type\": \"unknown\",\n                    \"value\": self._get_value_repr(node.value),\n                }\n\n    def _extract_class_annotated_attributes(self, node):\n        \"\"\"Extract class attributes from annotated assignment nodes.\"\"\"\n        if isinstance(node.target, ast.Name) and not node.target.id.startswith(\"_\"):\n            self.api[\"classes\"][self.current_class][\"attributes\"][node.target.id] = {\n                \"type\": self._format_name(node.annotation),\n                \"value\": self._get_value_repr(node.value) if node.value else \"None\",\n            }\n\n    def _get_function_signature(self, node):\n        \"\"\"Extract function signature from a FunctionDef node.\"\"\"\n        args = []\n        # Add positional-only arguments (Python 3.8+)\n        if hasattr(node.args, \"posonlyargs\"):\n            for arg in node.args.posonlyargs:\n                arg_str = arg.arg\n                if arg.annotation:\n                    arg_str += f\": {self._format_name(arg.annotation)}\"\n                args.append(arg_str)\n            if node.args.posonlyargs:\n                args.append(\"/\")\n\n        # Add positional arguments\n        for arg in node.args.args:\n            arg_str = arg.arg\n            if arg.annotation:\n                arg_str += f\": {self._format_name(arg.annotation)}\"\n            args.append(arg_str)\n\n        # Add *args\n        if node.args.vararg:\n            arg_str = f\"*{node.args.vararg.arg}\"\n            if node.args.vararg.annotation:\n                arg_str += f\": {self._format_name(node.args.vararg.annotation)}\"\n            args.append(arg_str)\n        elif node.args.kwonlyargs:\n            args.append(\"*\")\n\n        # Add keyword-only arguments\n        for arg in node.args.kwonlyargs:\n            arg_str = arg.arg\n            if arg.annotation:\n                arg_str += f\": {self._format_name(arg.annotation)}\"\n            args.append(arg_str)\n\n        # Add **kwargs\n        if node.args.kwarg:\n            arg_str = f\"**{node.args.kwarg.arg}\"\n            if node.args.kwarg.annotation:\n                arg_str += f\": {self._format_name(node.args.kwarg.annotation)}\"\n            args.append(arg_str)\n\n        # Add default values\n        defaults = [None] * (\n            len(node.args.args) - len(node.args.defaults)\n        ) + node.args.defaults\n        for i, default in enumerate(defaults):\n            if default:\n                args[i] += f\"={self._get_value_repr(default)}\"\n\n        # Add keyword-only default values\n        for i, default in enumerate(node.args.kw_defaults):\n            if default:\n                # Account for positional args and *args\n                idx = len(node.args.args) + (1 if node.args.vararg else 0) + i\n                args[idx] += f\"={self._get_value_repr(default)}\"\n\n        # Add return type\n        return_annotation = \"\"\n        if node.returns:\n            return_annotation = f\" -> {self._format_name(node.returns)}\"\n\n        return f\"({', '.join(args)}){return_annotation}\"\n\n    def _format_name(self, node):\n        \"\"\"Format a name node as a string.\"\"\"\n        if isinstance(node, ast.Name):\n            return node.id\n        elif isinstance(node, ast.Attribute):\n            return f\"{self._format_name(node.value)}.{node.attr}\"\n        elif isinstance(node, ast.Subscript):\n            return f\"{self._format_name(node.value)}[{self._format_name(node.slice)}]\"\n        elif isinstance(node, ast.Index):  # Python 3.8 and earlier\n            return self._format_name(node.value)\n        elif isinstance(node, ast.Tuple):\n            return f\"({', '.join(self._format_name(elt) for elt in node.elts)})\"\n        elif isinstance(node, ast.List):\n            return f\"[{', '.join(self._format_name(elt) for elt in node.elts)}]\"\n        elif isinstance(node, ast.Constant):\n            return repr(node.value)\n        elif isinstance(node, ast.Str):  # Python 3.7 and earlier\n            return repr(node.s)\n        elif isinstance(node, ast.Num):  # Python 3.7 and earlier\n            return repr(node.n)\n        elif isinstance(node, ast.NameConstant):  # Python 3.7 and earlier\n            return repr(node.value)\n        elif isinstance(node, ast.BinOp):\n            left = self._format_name(node.left)\n            op = self._get_op_symbol(node.op)\n            right = self._format_name(node.right)\n            return f\"{left} {op} {right}\"\n        elif isinstance(node, ast.UnaryOp):\n            return f\"{self._get_op_symbol(node.op)}{self._format_name(node.operand)}\"\n        elif isinstance(node, ast.keyword):\n            return f\"{node.arg}={self._format_name(node.value)}\"\n        elif isinstance(node, ast.Call):\n            args = [self._format_name(arg) for arg in node.args]\n            kwargs = [self._format_name(kw) for kw in node.keywords]\n            return f\"{self._format_name(node.func)}({', '.join(args + kwargs)})\"\n        elif isinstance(node, ast.Ellipsis):\n            return \"...\"\n        else:\n            return str(type(node).__name__)\n\n    def _get_op_symbol(self, op):\n        \"\"\"Get the string representation of an operator.\"\"\"\n        op_map = {\n            ast.Add: \"+\",\n            ast.Sub: \"-\",\n            ast.Mult: \"*\",\n            ast.Div: \"/\",\n            ast.FloorDiv: \"//\",\n            ast.Mod: \"%\",\n            ast.Pow: \"**\",\n            ast.LShift: \"<<\",\n            ast.RShift: \">>\",\n            ast.BitOr: \"|\",\n            ast.BitXor: \"^\",\n            ast.BitAnd: \"&\",\n            ast.MatMult: \"@\",\n            ast.USub: \"-\",\n            ast.UAdd: \"+\",\n            ast.Not: \"not \",\n            ast.Invert: \"~\",\n        }\n        return op_map.get(type(op), \"?\")\n\n    def _get_value_repr(self, node):\n        \"\"\"Get a string representation of a value node.\"\"\"\n        if isinstance(node, ast.Constant):\n            return repr(node.value)\n        elif isinstance(node, ast.Str):  # Python 3.7 and earlier\n            return repr(node.s)\n        elif isinstance(node, ast.Num):  # Python 3.7 and earlier\n            return repr(node.n)\n        elif isinstance(node, ast.NameConstant):  # Python 3.7 and earlier\n            return repr(node.value)\n        elif isinstance(node, ast.List):\n            return f\"[{', '.join(self._get_value_repr(elt) for elt in node.elts)}]\"\n        elif isinstance(node, ast.Tuple):\n            return f\"({', '.join(self._get_value_repr(elt) for elt in node.elts)})\"\n        elif isinstance(node, ast.Dict):\n            items = []\n            for k, v in zip(node.keys, node.values):\n                if k is None:  # For dict unpacking: {**d}\n                    items.append(f\"**{self._get_value_repr(v)}\")\n                else:\n                    items.append(\n                        f\"{self._get_value_repr(k)}: {self._get_value_repr(v)}\"\n                    )\n            return f\"{{{', '.join(items)}}}\"\n        elif isinstance(node, ast.Set):\n            return f\"{{{', '.join(self._get_value_repr(elt) for elt in node.elts)}}}\"\n        elif isinstance(node, ast.Name):\n            return node.id\n        elif isinstance(node, ast.Call):\n            return f\"{self._format_name(node)}(...)\"\n        elif isinstance(node, ast.Attribute):\n            return self._format_name(node)\n        elif isinstance(node, ast.BinOp):\n            return self._format_name(node)\n        elif isinstance(node, ast.UnaryOp):\n            return self._format_name(node)\n        elif isinstance(node, ast.ListComp):\n            return \"[...]\"\n        elif isinstance(node, ast.DictComp):\n            return \"{...}\"\n        elif isinstance(node, ast.SetComp):\n            return \"{...}\"\n        elif isinstance(node, ast.GeneratorExp):\n            return \"(...)\"\n        else:\n            return \"...\"",
+      "depth": 1,
+      "docstring": "AST visitor that extracts the public API from Python modules.",
+      "signature": "",
+      "is_public_api": true,
+      "methods": [
+        "__init__",
+        "visit_ClassDef",
+        "visit_FunctionDef",
+        "visit_AsyncFunctionDef",
+        "visit_Assign",
+        "visit_AnnAssign",
+        "visit_Import",
+        "visit_ImportFrom"
+      ]
+    },
+    {
+      "id": "interface.extract_module_api",
+      "type": "function",
+      "parent": "interface",
+      "path": "/Users/ph/Documents/ctxclip/ctxclip/interface.py",
+      "line_start": 315,
+      "line_end": 349,
+      "code": "# From /Users/ph/Documents/ctxclip/ctxclip/interface.py\ndef extract_module_api(file_path: str) -> Dict[str, Any]:\n    \"\"\"\n    Extract the public API from a Python file using AST parsing.\n\n    Args:\n        file_path: Path to the Python file\n\n    Returns:\n        Dictionary containing the module's public API\n    \"\"\"\n    with open(file_path, \"r\", encoding=\"utf-8\") as f:\n        source = f.read()\n\n    try:\n        tree = ast.parse(source)\n        extractor = APIExtractor()\n        extractor.visit(tree)\n\n        # Add module docstring\n        module_docstring = ast.get_docstring(tree)\n        if module_docstring:\n            extractor.api[\"docstring\"] = module_docstring\n        else:\n            extractor.api[\"docstring\"] = \"\"\n\n        return extractor.api\n    except SyntaxError as e:\n        print(f\"Error parsing {file_path}: {e}\")\n        return {\n            \"classes\": {},\n            \"functions\": {},\n            \"variables\": {},\n            \"imports\": {},\n            \"docstring\": f\"Error parsing module: {e}\",\n        }",
+      "depth": 1,
+      "docstring": "Extract the public API from a Python file using AST parsing.\n\nArgs:\n    file_path: Path to the Python file\n\nReturns:\n    Dictionary containing the module's public API",
+      "signature": "(file_path: str) -> Dict[(str, Any)]",
+      "is_public_api": true,
+      "methods": ""
+    },
+    {
+      "id": "interface.extract_package_api",
+      "type": "function",
+      "parent": "interface",
+      "path": "/Users/ph/Documents/ctxclip/ctxclip/interface.py",
+      "line_start": 352,
+      "line_end": 387,
+      "code": "# From /Users/ph/Documents/ctxclip/ctxclip/interface.py\ndef extract_package_api(package_path: str) -> Dict[str, Any]:\n    \"\"\"\n    Extract the public API from a Python package.\n\n    Args:\n        package_path: Path to the package directory\n\n    Returns:\n        Dictionary containing the package's public API\n    \"\"\"\n    package_path = Path(package_path)\n\n    if package_path.is_file() and package_path.suffix == \".py\":\n        return {\"modules\": {package_path.stem: extract_module_api(str(package_path))}}\n\n    package_api = {\"modules\": {}, \"packages\": {}}\n\n    # Check if this is a package (has __init__.py)\n    init_file = package_path / \"__init__.py\"\n    if init_file.exists():\n        package_api[\"modules\"][\"__init__\"] = extract_module_api(str(init_file))\n\n        # Process all Python files in the directory\n    for item in package_path.iterdir():\n        if item.is_file() and item.suffix == \".py\" and item.name != \"__init__.py\":\n            module_name = item.stem\n            if not module_name.startswith(\"_\"):  # Skip private modules\n                package_api[\"modules\"][module_name] = extract_module_api(str(item))\n\n        # Recursively process subpackages\n        elif item.is_dir() and not item.name.startswith(\"_\"):\n            subpackage_init = item / \"__init__.py\"\n            if subpackage_init.exists():  # It's a proper package\n                package_api[\"packages\"][item.name] = extract_package_api(str(item))\n\n    return package_api",
+      "depth": 1,
+      "docstring": "Extract the public API from a Python package.\n\nArgs:\n    package_path: Path to the package directory\n\nReturns:\n    Dictionary containing the package's public API",
+      "signature": "(package_path: str) -> Dict[(str, Any)]",
+      "is_public_api": true,
+      "methods": ""
+    },
+    {
+      "id": "interface.generate_markdown",
+      "type": "function",
+      "parent": "interface",
+      "path": "/Users/ph/Documents/ctxclip/ctxclip/interface.py",
+      "line_start": 390,
+      "line_end": 437,
+      "code": "# From /Users/ph/Documents/ctxclip/ctxclip/interface.py\ndef generate_markdown(api: Dict[str, Any], name: str, is_package: bool = True) -> str:\n    \"\"\"\n    Generate Markdown documentation from the extracted API.\n\n    Args:\n        api: Dictionary containing the API information\n        name: Name of the package or module\n        is_package: Whether this is a package (True) or a module (False)\n\n    Returns:\n        Markdown string representation of the API\n    \"\"\"\n    md = f\"# {name} API Documentation\\n\\n\"\n\n    if is_package:\n        md += \"## Package Overview\\n\\n\"\n\n        # Document modules\n        if api.get(\"modules\"):\n            md += \"### Modules\\n\\n\"\n            for module_name, module_api in sorted(api[\"modules\"].items()):\n                md += f\"- [{module_name}](#{module_name.lower()})\\n\"\n            md += \"\\n\"\n\n        # Document subpackages\n        if api.get(\"packages\"):\n            md += \"### Subpackages\\n\\n\"\n            for package_name in sorted(api[\"packages\"].keys()):\n                md += f\"- [{package_name}](#{package_name.lower()})\\n\"\n            md += \"\\n\"\n\n        # Document each module\n        for module_name, module_api in sorted(api.get(\"modules\", {}).items()):\n            md += f\"## {module_name}\\n\\n\"\n            md += _generate_module_markdown(module_api, module_name)\n\n        # Document each subpackage\n        for package_name, package_api in sorted(api.get(\"packages\", {}).items()):\n            md += f\"## {package_name}\\n\\n\"\n            # Extract content after the first heading and indent it\n            subpackage_md = generate_markdown(package_api, package_name, True)\n            subpackage_content = \"\\n\".join(subpackage_md.split(\"\\n\")[2:])\n            md += subpackage_content + \"\\n\\n\"\n    else:\n        # It's a single module\n        md += _generate_module_markdown(api, name)\n\n    return md",
+      "depth": 1,
+      "docstring": "Generate Markdown documentation from the extracted API.\n\nArgs:\n    api: Dictionary containing the API information\n    name: Name of the package or module\n    is_package: Whether this is a package (True) or a module (False)\n\nReturns:\n    Markdown string representation of the API",
+      "signature": "(api: Dict[(str, Any)], name: str, is_package: bool=True) -> str",
+      "is_public_api": true,
+      "methods": ""
+    },
+    {
+      "id": "interface._generate_module_markdown",
+      "type": "function",
+      "parent": "interface",
+      "path": "/Users/ph/Documents/ctxclip/ctxclip/interface.py",
+      "line_start": 441,
+      "line_end": 551,
+      "code": "# From /Users/ph/Documents/ctxclip/ctxclip/interface.py\ndef _generate_module_markdown(api: Dict[str, Any], module_name: str) -> str:\n    \"\"\"\n    Generate Markdown documentation for a single module.\n\n    Args:\n        api: Dictionary containing the module's API\n        module_name: Name of the module\n\n    Returns:\n        Markdown string representation of the module API\n    \"\"\"\n    md = \"\"\n\n    # Add module docstring\n    if api.get(\"docstring\"):\n        md += f\"{api['docstring'].strip()}\\n\\n\"\n\n    # Document classes\n    if api.get(\"classes\"):\n        md += \"### Classes\\n\\n\"\n\n        for class_name, class_info in sorted(api[\"classes\"].items()):\n            md += f\"#### {class_name}\\n\\n\"\n\n            if class_info.get(\"bases\"):\n                md += f\"*Bases: {', '.join(class_info['bases'])}*\\n\\n\"\n\n            if class_info.get(\"docstring\"):\n                md += f\"{class_info['docstring']}\\n\\n\"\n\n            # Document attributes\n            if class_info.get(\"attributes\"):\n                md += \"##### Attributes\\n\\n\"\n\n                for attr_name, attr_info in sorted(class_info[\"attributes\"].items()):\n                    type_str = (\n                        f\": {attr_info['type']}\"\n                        if attr_info[\"type\"] != \"unknown\"\n                        else \"\"\n                    )\n                    md += f\"- `{attr_name}{type_str}`\"\n\n                    if attr_info[\"value\"] != \"...\":\n                        md += f\" = {attr_info['value']}\"\n\n                    md += \"\\n\"\n\n                md += \"\\n\"\n\n            # Document methods\n            if class_info.get(\"methods\"):\n                md += \"##### Methods\\n\\n\"\n\n                for method_name, method_info in sorted(class_info[\"methods\"].items()):\n                    decorators = \"\"\n                    if method_info.get(\"decorators\"):\n                        decorators = \" \".join(\n                            [f\"@{d}\" for d in method_info[\"decorators\"]]\n                        )\n                        if decorators:\n                            decorators = f\"{decorators}\\n\"\n\n                    md += f\"###### `{decorators}{method_name}{method_info['signature']}`\\n\\n\"\n\n                    if method_info.get(\"docstring\"):\n                        md += f\"{method_info['docstring']}\\n\\n\"\n\n            md += \"\\n\"\n\n    # Document functions\n    if api.get(\"functions\"):\n        md += \"### Functions\\n\\n\"\n\n        for func_name, func_info in sorted(api[\"functions\"].items()):\n            decorators = \"\"\n            if func_info.get(\"decorators\"):\n                decorators = \" \".join([f\"@{d}\" for d in func_info[\"decorators\"]])\n                if decorators:\n                    decorators = f\"{decorators}\\n\"\n\n            md += f\"#### `{decorators}{func_name}{func_info['signature']}`\\n\\n\"\n\n            if func_info.get(\"docstring\"):\n                md += f\"{func_info['docstring']}\\n\\n\"\n\n    # Document variables\n    if api.get(\"variables\"):\n        md += \"### Variables\\n\\n\"\n\n        for var_name, var_info in sorted(api[\"variables\"].items()):\n            type_str = f\": {var_info['type']}\" if var_info[\"type\"] != \"unknown\" else \"\"\n            md += f\"#### `{var_name}{type_str}`\\n\\n\"\n\n            if var_info[\"value\"] != \"...\":\n                md += f\"Value: `{var_info['value']}`\\n\\n\"\n\n    # Document imports\n    if api.get(\"imports\"):\n        md += \"### Imports\\n\\n\"\n\n        # (import_name)\n        #pylint: disable=unused-variable\n        for import_name, import_info in sorted(api[\"imports\"].items()):\n            if import_info.get(\"alias\"):\n                md += f\"- `{import_info['module']} as {import_info['alias']}`\\n\"\n            else:\n                md += f\"- `{import_info['module']}`\\n\"\n\n        md += \"\\n\"\n\n    return md",
+      "depth": 1,
+      "docstring": "",
+      "signature": "",
+      "is_public_api": "",
+      "methods": ""
+    },
+    {
+      "id": "interface.arg_parser",
+      "type": "function",
+      "parent": "interface",
+      "path": "/Users/ph/Documents/ctxclip/ctxclip/interface.py",
+      "line_start": 554,
+      "line_end": 564,
+      "code": "",
+      "depth": "",
+      "docstring": "argument parsing",
+      "signature": "(parser=None)",
+      "is_public_api": true,
+      "methods": ""
+    },
+    {
+      "id": "interface.document",
+      "type": "function",
+      "parent": "interface",
+      "path": "/Users/ph/Documents/ctxclip/ctxclip/interface.py",
+      "line_start": 567,
+      "line_end": 584,
+      "code": "# From /Users/ph/Documents/ctxclip/ctxclip/interface.py\ndef document(package_path):\n    \"\"\"generate markdown docs for package_path\"\"\"\n    path = Path(package_path)\n    is_package = path.is_dir() and (path / \"__init__.py\").exists()\n    is_module = path.is_file() and path.suffix == \".py\"\n\n    print(f\"Extracting API from {package_path}...\")\n\n    if is_package:\n        api = extract_package_api(package_path)\n        markdown = generate_markdown(api, path.name, True)\n    elif is_module:\n        api = extract_module_api(package_path)\n        markdown = generate_markdown({\"modules\": {path.stem: api}}, path.stem, False)\n    else:\n        print(f\"Error: {package_path} is neither a valid Python package nor a module\")\n        return\n    return markdown",
+      "depth": 1,
+      "docstring": "generate markdown docs for package_path",
+      "signature": "(package_path)",
+      "is_public_api": true,
+      "methods": ""
+    },
+    {
+      "id": "interface.main",
+      "type": "function",
+      "parent": "interface",
+      "path": "/Users/ph/Documents/ctxclip/ctxclip/interface.py",
+      "line_start": 587,
+      "line_end": 602,
+      "code": "",
+      "depth": "",
+      "docstring": "cli entrypoint",
+      "signature": "(args=None)",
+      "is_public_api": true,
+      "methods": ""
+    },
+    {
+      "id": "ctxclip.main.*",
+      "type": "object",
+      "parent": "ctxclip.main",
+      "path": "",
+      "line_start": "",
+      "line_end": "",
+      "code": "",
+      "depth": "",
+      "docstring": "",
+      "signature": "",
+      "is_public_api": "",
+      "methods": ""
+    },
+    {
+      "id": "ctxclip.expand.*",
+      "type": "object",
+      "parent": "ctxclip.expand",
+      "path": "",
+      "line_start": "",
+      "line_end": "",
+      "code": "",
+      "depth": "",
+      "docstring": "",
+      "signature": "",
+      "is_public_api": "",
+      "methods": ""
+    },
+    {
+      "id": "ctxclip.interface.*",
+      "type": "object",
+      "parent": "ctxclip.interface",
+      "path": "",
+      "line_start": "",
+      "line_end": "",
+      "code": "",
+      "depth": "",
+      "docstring": "",
+      "signature": "",
+      "is_public_api": "",
+      "methods": ""
+    },
+    {
+      "id": "ctxclip.expand.arg_parser",
+      "type": "object",
+      "parent": "ctxclip.expand",
+      "path": "",
+      "line_start": "",
+      "line_end": "",
+      "code": "",
+      "depth": "",
+      "docstring": "",
+      "signature": "",
+      "is_public_api": "",
+      "methods": ""
+    },
+    {
+      "id": "ctxclip.expand.main",
+      "type": "object",
+      "parent": "ctxclip.expand",
+      "path": "",
+      "line_start": "",
+      "line_end": "",
+      "code": "",
+      "depth": "",
+      "docstring": "",
+      "signature": "",
+      "is_public_api": "",
+      "methods": ""
+    },
+    {
+      "id": "ctxclip.interface.arg_parser",
+      "type": "object",
+      "parent": "ctxclip.interface",
+      "path": "",
+      "line_start": "",
+      "line_end": "",
+      "code": "",
+      "depth": "",
+      "docstring": "",
+      "signature": "",
+      "is_public_api": "",
+      "methods": ""
+    },
+    {
+      "id": "ctxclip.interface.main",
+      "type": "object",
+      "parent": "ctxclip.interface",
+      "path": "",
+      "line_start": "",
+      "line_end": "",
+      "code": "",
+      "depth": "",
+      "docstring": "",
+      "signature": "",
+      "is_public_api": "",
+      "methods": ""
+    },
+    {
+      "id": "ctxclip.graph.arg_parser",
+      "type": "object",
+      "parent": "ctxclip.graph",
+      "path": "",
+      "line_start": "",
+      "line_end": "",
+      "code": "",
+      "depth": "",
+      "docstring": "",
+      "signature": "",
+      "is_public_api": "",
+      "methods": ""
+    },
+    {
+      "id": "ctxclip.graph.main",
+      "type": "object",
+      "parent": "ctxclip.graph",
+      "path": "",
+      "line_start": "",
+      "line_end": "",
+      "code": "",
+      "depth": "",
+      "docstring": "",
+      "signature": "",
+      "is_public_api": "",
+      "methods": ""
+    },
+    {
+      "id": "main.main",
+      "type": "function",
+      "parent": "main",
+      "path": "/Users/ph/Documents/ctxclip/ctxclip/main.py",
+      "line_start": 12,
+      "line_end": 29,
+      "code": "",
+      "depth": "",
+      "docstring": "entry to CLI",
+      "signature": "()",
+      "is_public_api": true,
+      "methods": ""
+    },
+    {
+      "id": "dataclasses.dataclass",
+      "type": "object",
+      "parent": "dataclasses",
+      "path": "",
+      "line_start": "",
+      "line_end": "",
+      "code": "",
+      "depth": "",
+      "docstring": "",
+      "signature": "",
+      "is_public_api": "",
+      "methods": ""
+    },
+    {
+      "id": "typing.List",
+      "type": "object",
+      "parent": "typing",
+      "path": "",
+      "line_start": "",
+      "line_end": "",
+      "code": "",
+      "depth": "",
+      "docstring": "",
+      "signature": "",
+      "is_public_api": "",
+      "methods": ""
+    },
+    {
+      "id": "typing.Set",
+      "type": "object",
+      "parent": "typing",
+      "path": "",
+      "line_start": "",
+      "line_end": "",
+      "code": "",
+      "depth": "",
+      "docstring": "",
+      "signature": "",
+      "is_public_api": "",
+      "methods": ""
+    },
+    {
+      "id": "typing.Tuple",
+      "type": "object",
+      "parent": "typing",
+      "path": "",
+      "line_start": "",
+      "line_end": "",
+      "code": "",
+      "depth": "",
+      "docstring": "",
+      "signature": "",
+      "is_public_api": "",
+      "methods": ""
+    },
+    {
+      "id": "expand.CodeContext",
+      "type": "class",
+      "parent": "expand",
+      "path": "/Users/ph/Documents/ctxclip/ctxclip/expand.py",
+      "line_start": 13,
+      "line_end": 22,
+      "code": "# From /Users/ph/Documents/ctxclip/ctxclip/expand.py\nclass CodeContext:\n    \"\"\"CodeContext\"\"\"\n\n    name: str\n    type: str  # 'function', 'class', 'variable'\n    source: str\n    line_start: int\n    line_end: int\n    depth: int = 0  # Recursion depth in the reference chain\n    signature: str = \"\"",
+      "depth": 1,
+      "docstring": "CodeContext",
+      "signature": "",
+      "is_public_api": true,
+      "methods": []
+    },
+    {
+      "id": "expand.parse_file",
+      "type": "function",
+      "parent": "expand",
+      "path": "/Users/ph/Documents/ctxclip/ctxclip/expand.py",
+      "line_start": 25,
+      "line_end": 30,
+      "code": "# From /Users/ph/Documents/ctxclip/ctxclip/expand.py\ndef parse_file(file_path: str) -> Tuple[ast.Module, List[str]]:\n    \"\"\"Parse a Python file and return its AST and source lines.\"\"\"\n    with open(file_path, \"r\", encoding=\"utf-8\") as f:\n        source = f.read()\n        lines = source.splitlines()\n    return ast.parse(source), lines",
+      "depth": 1,
+      "docstring": "Parse a Python file and return its AST and source lines.",
+      "signature": "(file_path: str) -> Tuple[(ast.Module, List[str])]",
+      "is_public_api": true,
+      "methods": ""
+    },
+    {
+      "id": "expand.get_source_segment",
+      "type": "function",
+      "parent": "expand",
+      "path": "/Users/ph/Documents/ctxclip/ctxclip/expand.py",
+      "line_start": 33,
+      "line_end": 37,
+      "code": "# From /Users/ph/Documents/ctxclip/ctxclip/expand.py\ndef get_source_segment(node: ast.AST, lines: List[str]) -> str:\n    \"\"\"Extract source code for a given AST node.\"\"\"\n    if hasattr(node, \"lineno\") and hasattr(node, \"end_lineno\"):\n        return \"\\n\".join(lines[node.lineno - 1 : node.end_lineno])\n    return \"\"",
+      "depth": 1,
+      "docstring": "Extract source code for a given AST node.",
+      "signature": "(node: ast.AST, lines: List[str]) -> str",
+      "is_public_api": true,
+      "methods": ""
+    },
+    {
+      "id": "expand.reconstruct_function_signature",
+      "type": "function",
+      "parent": "expand",
+      "path": "/Users/ph/Documents/ctxclip/ctxclip/expand.py",
+      "line_start": 40,
+      "line_end": 93,
+      "code": "# From /Users/ph/Documents/ctxclip/ctxclip/expand.py\ndef reconstruct_function_signature(func_def: ast.FunctionDef):\n    \"\"\"\n    Reconstructs the function signature from an ast.FunctionDef node.\n    \"\"\"\n    # Function name\n    func_name = func_def.name\n\n    # Arguments\n    args = []\n    for arg in func_def.args.args:\n        arg_str = arg.arg\n        if arg.annotation:\n            arg_str += f\": {ast.unparse(arg.annotation)}\"\n        args.append(arg_str)\n\n    # Vararg (*args)\n    if func_def.args.vararg:\n        vararg = f\"*{func_def.args.vararg.arg}\"\n        if func_def.args.vararg.annotation:\n            vararg += f\": {ast.unparse(func_def.args.vararg.annotation)}\"\n        args.append(vararg)\n\n    # Keyword-only arguments\n    for kwarg, default in zip(func_def.args.kwonlyargs, func_def.args.kw_defaults):\n        kwarg_str = kwarg.arg\n        if kwarg.annotation:\n            kwarg_str += f\": {ast.unparse(kwarg.annotation)}\"\n        if default:\n            kwarg_str += f\" = {ast.unparse(default)}\"\n        args.append(kwarg_str)\n\n    # Kwarg (**kwargs)\n    if func_def.args.kwarg:\n        kwarg = f\"**{func_def.args.kwarg.arg}\"\n        if func_def.args.kwarg.annotation:\n            kwarg += f\": {ast.unparse(func_def.args.kwarg.annotation)}\"\n        args.append(kwarg)\n\n    # Defaults for positional arguments\n    defaults = [None] * (\n        len(func_def.args.args) - len(func_def.args.defaults)\n    ) + func_def.args.defaults\n    for i, default in enumerate(defaults):\n        if default:\n            args[i] += f\" = {ast.unparse(default)}\"\n\n    # Return annotation\n    return_annotation = \"\"\n    if func_def.returns:\n        return_annotation = f\" -> {ast.unparse(func_def.returns)}\"\n\n    # Combine everything into a function signature\n    signature = f\"def {func_name}({', '.join(args)}){return_annotation}\"\n    return signature",
+      "depth": 1,
+      "docstring": "Reconstructs the function signature from an ast.FunctionDef node.",
+      "signature": "(func_def: ast.FunctionDef)",
+      "is_public_api": true,
+      "methods": ""
+    },
+    {
+      "id": "expand.DefinitionCollector",
+      "type": "class",
+      "parent": "expand",
+      "path": "/Users/ph/Documents/ctxclip/ctxclip/expand.py",
+      "line_start": 96,
+      "line_end": 175,
+      "code": "# From /Users/ph/Documents/ctxclip/ctxclip/expand.py\nclass DefinitionCollector(ast.NodeVisitor):\n    \"\"\"Collect all definitions (functions, classes, variables) in a file.\"\"\"\n\n    # pylint: disable=missing-docstring disable=invalid-name\n\n    def __init__(\n        self,\n        lines,\n        include_functions=True,\n        include_classes=True,\n        include_variables=True,\n        name_pattern=None,\n    ):\n        self.current_path = []\n        self.definitions: Dict[str, CodeContext] = {}\n        self.lines = lines\n        self.include_functions = include_functions\n        self.include_classes = include_classes\n        self.include_variables = include_variables\n        self.name_pattern = name_pattern\n        self.name_regex = re.compile(name_pattern) if name_pattern else None\n\n    def visit_Module(self, node):\n        # Add module name if available\n        module_name = getattr(node, \"name\", \"\")\n        if module_name:\n            self.current_path.append(module_name)\n        self.generic_visit(node)\n\n    def visit_FunctionDef(self, node: ast.FunctionDef):\n        full_path = \".\".join(self.current_path + [node.name])\n        if self.include_functions:\n            # Skip if name doesn't match pattern\n            if self.name_regex and not self.name_regex.match(node.name):\n                self.generic_visit(node)\n                return\n            signature = reconstruct_function_signature(node)\n            self.definitions[node.name] = CodeContext(\n                name=full_path,\n                type=\"function\",\n                signature=signature,\n                source=get_source_segment(node, self.lines),\n                line_start=node.lineno,\n                line_end=node.end_lineno,\n            )\n        self.generic_visit(node)\n\n    def visit_ClassDef(self, node: ast.ClassDef):\n        self.current_path.append(node.name)\n        if self.include_classes:\n            # Skip if name doesn't match pattern\n            if self.name_regex and not self.name_regex.match(node.name):\n                self.generic_visit(node)\n                return\n\n            self.definitions[node.name] = CodeContext(\n                name=node.name,\n                type=\"class\",\n                source=get_source_segment(node, self.lines),\n                line_start=node.lineno,\n                line_end=node.end_lineno,\n            )\n        self.generic_visit(node)\n\n    def visit_Assign(self, node: ast.Assign):\n        if self.include_variables:\n            for target in node.targets:\n                if isinstance(target, ast.Name):\n                    # Skip if name doesn't match pattern\n                    if self.name_regex and not self.name_regex.match(target.id):\n                        continue\n\n                    self.definitions[target.id] = CodeContext(\n                        name=target.id,\n                        type=\"variable\",\n                        source=get_source_segment(node, self.lines),\n                        line_start=node.lineno,\n                        line_end=node.end_lineno,\n                    )\n        self.generic_visit(node)",
+      "depth": 1,
+      "docstring": "Collect all definitions (functions, classes, variables) in a file.",
+      "signature": "",
+      "is_public_api": true,
+      "methods": [
+        "__init__",
+        "visit_Module",
+        "visit_FunctionDef",
+        "visit_ClassDef",
+        "visit_Assign"
+      ]
+    },
+    {
+      "id": "expand.ReferenceExtractor",
+      "type": "class",
+      "parent": "expand",
+      "path": "/Users/ph/Documents/ctxclip/ctxclip/expand.py",
+      "line_start": 178,
+      "line_end": 202,
+      "code": "# From /Users/ph/Documents/ctxclip/ctxclip/expand.py\nclass ReferenceExtractor(ast.NodeVisitor):\n    \"\"\"Extract all names referenced in a code snippet.\"\"\"\n\n    # pylint: disable=missing-docstring disable=invalid-name\n\n    def __init__(self):\n        self.references: Set[str] = set()\n        self.defined_names: Set[str] = set()  # Track defined names\n\n    def visit_Name(self, node: ast.Name):\n        if isinstance(node.ctx, ast.Store):\n            # Track names being defined\n            self.defined_names.add(node.id)\n        elif isinstance(node.ctx, ast.Load):\n            # Only add references if they're not defined in this scope\n            if node.id not in self.defined_names:\n                self.references.add(node.id)\n        self.generic_visit(node)\n\n    def visit_Assign(self, node: ast.Assign):\n        # Process the right side first to capture references\n        self.visit(node.value)\n        # Then process targets (which will be stored in defined_names)\n        for target in node.targets:\n            self.visit(target)",
+      "depth": 1,
+      "docstring": "Extract all names referenced in a code snippet.",
+      "signature": "",
+      "is_public_api": true,
+      "methods": [
+        "__init__",
+        "visit_Name",
+        "visit_Assign"
+      ]
+    },
+    {
+      "id": "expand.find_package_files",
+      "type": "function",
+      "parent": "expand",
+      "path": "/Users/ph/Documents/ctxclip/ctxclip/expand.py",
+      "line_start": 205,
+      "line_end": 212,
+      "code": "# From /Users/ph/Documents/ctxclip/ctxclip/expand.py\ndef find_package_files(directory: str) -> List[str]:\n    \"\"\"Find all Python files in the package.\"\"\"\n    python_files = []\n    for root, _, files in os.walk(directory):\n        for file in files:\n            if file.endswith(\".py\"):\n                python_files.append(os.path.join(root, file))\n    return python_files",
+      "depth": 1,
+      "docstring": "Find all Python files in the package.",
+      "signature": "(directory: str) -> List[str]",
+      "is_public_api": true,
+      "methods": ""
+    },
+    {
+      "id": "expand.collect_all_definitions",
+      "type": "function",
+      "parent": "expand",
+      "path": "/Users/ph/Documents/ctxclip/ctxclip/expand.py",
+      "line_start": 215,
+      "line_end": 241,
+      "code": "# From /Users/ph/Documents/ctxclip/ctxclip/expand.py\ndef collect_all_definitions(\n    package_dir: str,\n    include_functions=True,\n    include_classes=True,\n    include_variables=True,\n) -> Dict[str, CodeContext]:\n    \"\"\"Collect all definitions from all Python files in the package.\"\"\"\n    package_files = find_package_files(package_dir)\n    all_definitions: Dict[str, CodeContext] = {}\n\n    for py_file in package_files:\n        file_tree, file_lines = parse_file(py_file)\n        def_collector = DefinitionCollector(\n            file_lines,\n            include_functions=include_functions,\n            include_classes=include_classes,\n            include_variables=include_variables,\n        )\n        def_collector.visit(file_tree)\n\n        # Add file path information to each definition\n        for name, context in def_collector.definitions.items():\n            if name not in all_definitions:\n                context.source = f\"# From {py_file}\\n{context.source}\"\n                all_definitions[name] = context\n\n    return all_definitions",
+      "depth": 1,
+      "docstring": "Collect all definitions from all Python files in the package.",
+      "signature": "(package_dir: str, include_functions=True, include_classes=True, include_variables=True) -> Dict[(str, CodeContext)]",
+      "is_public_api": true,
+      "methods": ""
+    },
+    {
+      "id": "expand.extract_references_from_code",
+      "type": "function",
+      "parent": "expand",
+      "path": "/Users/ph/Documents/ctxclip/ctxclip/expand.py",
+      "line_start": 244,
+      "line_end": 253,
+      "code": "# From /Users/ph/Documents/ctxclip/ctxclip/expand.py\ndef extract_references_from_code(code_context: CodeContext) -> Set[str]:\n    \"\"\"Extract all references from a code context.\"\"\"\n    try:\n        tree = ast.parse(code_context.source)\n        extractor = ReferenceExtractor()\n        extractor.visit(tree)\n        return extractor.references\n    except SyntaxError:\n        # Handle potential syntax errors in the extracted code\n        return set()",
+      "depth": 1,
+      "docstring": "Extract all references from a code context.",
+      "signature": "(code_context: CodeContext) -> Set[str]",
+      "is_public_api": true,
+      "methods": ""
+    },
+    {
+      "id": "expand.expand_context_recursive",
+      "type": "function",
+      "parent": "expand",
+      "path": "/Users/ph/Documents/ctxclip/ctxclip/expand.py",
+      "line_start": 256,
+      "line_end": 298,
+      "code": "# From /Users/ph/Documents/ctxclip/ctxclip/expand.py\ndef expand_context_recursive(\n    selected_text_references: Set[str],\n    all_definitions: Dict[str, CodeContext],\n    max_depth: int,\n) -> Dict[str, CodeContext]:\n    \"\"\"\n    Recursively expand context for references up to max_depth.\n\n    Args:\n        selected_text_references: References found in the selected text\n        all_definitions: All definitions found in the package\n        max_depth: Maximum recursion depth\n\n    Returns:\n        Dictionary of expanded contexts with their recursion depth\n    \"\"\"\n    result: Dict[str, CodeContext] = {}\n\n    def process_level(references: Set[str], current_depth: int):\n        if current_depth > max_depth:\n            return\n\n        next_level_refs = set()\n\n        for ref in references:\n            if ref in all_definitions and ref not in result:\n                # Add this definition to our results\n                context = all_definitions[ref]\n                context.depth = current_depth\n                result[ref] = context\n\n                # Extract references from this definition for the next level\n                if current_depth < max_depth:\n                    refs_in_def = extract_references_from_code(context)\n                    next_level_refs.update(refs_in_def)\n\n        # Process the next level if we have references and haven't reached max depth\n        if next_level_refs and current_depth < max_depth:\n            process_level(next_level_refs, current_depth + 1)\n\n    # Start with depth 1 for direct references in the selected text\n    process_level(selected_text_references, 1)\n    return result",
+      "depth": 1,
+      "docstring": "Recursively expand context for references up to max_depth.\n\nArgs:\n    selected_text_references: References found in the selected text\n    all_definitions: All definitions found in the package\n    max_depth: Maximum recursion depth\n\nReturns:\n    Dictionary of expanded contexts with their recursion depth",
+      "signature": "(selected_text_references: Set[str], all_definitions: Dict[(str, CodeContext)], max_depth: int) -> Dict[(str, CodeContext)]",
+      "is_public_api": true,
+      "methods": ""
+    },
+    {
+      "id": "expand.extract_references_from_range",
+      "type": "function",
+      "parent": "expand",
+      "path": "/Users/ph/Documents/ctxclip/ctxclip/expand.py",
+      "line_start": 301,
+      "line_end": 343,
+      "code": "# From /Users/ph/Documents/ctxclip/ctxclip/expand.py\ndef extract_references_from_range(file_path, start_line, end_line):\n    \"\"\"Extract all references from the selected text range.\"\"\"\n    with open(file_path, \"r\", encoding=\"utf-8\") as f:\n        lines = f.readlines()\n\n    # Extract the lines and preserve their exact content\n    selected_lines = lines[start_line - 1 : end_line]\n    selected_text = \"\".join(\n        selected_lines\n    )  # Use join instead of '\\n'.join to preserve exact formatting\n\n    try:\n        # Try to parse the selected text\n        selected_tree = ast.parse(selected_text)\n        extractor = ReferenceExtractor()\n        extractor.visit(selected_tree)\n        return extractor.references\n    except SyntaxError:\n        # If that fails, try to dedent the code before parsing\n        try:\n            dedented_text = textwrap.dedent(selected_text)\n            selected_tree = ast.parse(dedented_text)\n            extractor = ReferenceExtractor()\n            extractor.visit(selected_tree)\n            return extractor.references\n        except SyntaxError:\n            # If that still fails, fall back to line-by-line parsing\n            print(\n                \"Warning: Syntax error in selected text. Falling back to line-by-line parsing.\"\n            )\n            references = set()\n            for i in range(start_line - 1, end_line):\n                line = lines[i].strip()  # Strip whitespace to handle indentation\n                if not line:  # Skip empty lines\n                    continue\n                try:\n                    line_tree = ast.parse(line)\n                    extractor = ReferenceExtractor()\n                    extractor.visit(line_tree)\n                    references.update(extractor.references)\n                except SyntaxError:\n                    continue\n            return references",
+      "depth": 1,
+      "docstring": "Extract all references from the selected text range.",
+      "signature": "(file_path, start_line, end_line)",
+      "is_public_api": true,
+      "methods": ""
+    },
+    {
+      "id": "expand.expand_context",
+      "type": "function",
+      "parent": "expand",
+      "path": "/Users/ph/Documents/ctxclip/ctxclip/expand.py",
+      "line_start": 346,
+      "line_end": 384,
+      "code": "# From /Users/ph/Documents/ctxclip/ctxclip/expand.py\ndef expand_context(\n    file_path: str,\n    start_line: int,\n    end_line: int,\n    max_depth: int = 2,\n    include_functions: bool = True,\n    include_classes: bool = True,\n    include_variables: bool = True,\n) -> Dict[str, CodeContext]:\n    \"\"\"\n    Expand context for references in the selected text range.\n    \n    Args:\n        file_path: Path to the file containing the code\n        start_line: Starting line number (1-indexed)\n        end_line: Ending line number (inclusive)\n        max_depth: Maximum recursion depth for expanding references\n        include_functions: Whether to include function definitions\n        include_classes: Whether to include class definitions\n        include_variables: Whether to include variable definitions\n        \n    Returns:\n        Dictionary mapping reference names to their CodeContext objects\n    \"\"\"\n\n    # Extract references from the selected range\n    selected_refs = extract_references_from_range(file_path, start_line, end_line)\n\n    # Collect all definitions from the package\n    package_dir = os.path.dirname(file_path)\n    all_definitions = collect_all_definitions(\n        package_dir,\n        include_functions=include_functions,\n        include_classes=include_classes,\n        include_variables=include_variables,\n    )\n\n    # Recursively expand context\n    return expand_context_recursive(selected_refs, all_definitions, max_depth)",
+      "depth": 1,
+      "docstring": "Expand context for references in the selected text range.\n\nArgs:\n    file_path: Path to the file containing the code\n    start_line: Starting line number (1-indexed)\n    end_line: Ending line number (inclusive)\n    max_depth: Maximum recursion depth for expanding references\n    include_functions: Whether to include function definitions\n    include_classes: Whether to include class definitions\n    include_variables: Whether to include variable definitions\n    \nReturns:\n    Dictionary mapping reference names to their CodeContext objects",
+      "signature": "(file_path: str, start_line: int, end_line: int, max_depth: int=2, include_functions: bool=True, include_classes: bool=True, include_variables: bool=True) -> Dict[(str, CodeContext)]",
+      "is_public_api": true,
+      "methods": ""
+    },
+    {
+      "id": "expand.expand_to_markdown",
+      "type": "function",
+      "parent": "expand",
+      "path": "/Users/ph/Documents/ctxclip/ctxclip/expand.py",
+      "line_start": 387,
+      "line_end": 469,
+      "code": "# From /Users/ph/Documents/ctxclip/ctxclip/expand.py\ndef expand_to_markdown(\n    filename: str,\n    start_line: int,\n    end_line: int,\n    depth: int,\n    include_functions=True,\n    include_classes=True,\n    include_variables=True,\n    sort=None,\n):\n    \"\"\"Expand context for references in the selected text range and return markdown\"\"\"\n    expanded = expand_context(\n        filename,\n        start_line,\n        end_line,\n        max_depth=depth,\n        include_functions=include_functions,\n        include_classes=include_classes,\n        include_variables=include_variables,\n    )\n\n    # Prepare output content\n    output_lines = []\n    output_lines.append(\"# Expanded Context Report\")\n    output_lines.append(\"\")\n    output_lines.append(f\"**File:** `{filename}`  \")\n    output_lines.append(f\"**Lines:** {start_line}-{end_line}  \")\n    output_lines.append(f\"**Max Depth:** {depth}  \")\n\n    # Add information about included types\n    included_types = []\n    if include_functions:\n        included_types.append(\"functions\")\n    if include_classes:\n        included_types.append(\"classes\")\n    if include_variables:\n        included_types.append(\"variables\")\n\n    output_lines.append(f\"**Included Types:** {', '.join(included_types)}  \")\n    output_lines.append(f\"**References Found:** {len(expanded)}  \")\n    output_lines.append(\"\")\n\n    # Group items by depth for better visualization\n    items_by_depth = {}\n    for name, context in expanded.items():\n        if context.depth not in items_by_depth:\n            items_by_depth[context.depth] = []\n        items_by_depth[context.depth].append((name, context))\n\n    # Sort items according to user preference\n    sorted_items = []\n    for depth in sorted(items_by_depth.keys()):\n        items = items_by_depth[depth]\n        if sort == \"name\":\n            items = sorted(items, key=lambda x: x[0])\n        elif sort == \"type\":\n            items = sorted(items, key=lambda x: x[1].type)\n        # For depth sorting, we keep the default order by depth\n        sorted_items.extend([(depth, name, context) for name, context in items])\n\n    # Generate markdown output\n    current_depth = None\n    for depth, name, context in sorted_items:\n        if depth != current_depth:\n            current_depth = depth\n            refs = f\"References from depth {depth-1}\"\n            if depth == 1:\n                refs = \"Direct references\"\n            output_lines.append(f\"## Depth {depth}: {refs}\")\n            output_lines.append(\"\")\n\n        # Add item header with type and name\n        output_lines.append(f\"### {context.type.capitalize()}: `{name}`\")\n        output_lines.append(f\"*Lines {context.line_start}-{context.line_end}*\")\n        output_lines.append(\"\")\n\n        # Add source code in a code block\n        output_lines.append(\"```\")\n        output_lines.append(context.source)\n        output_lines.append(\"```\")\n        output_lines.append(\"\")\n\n    return \"\\n\".join(output_lines)",
+      "depth": 1,
+      "docstring": "Expand context for references in the selected text range and return markdown",
+      "signature": "(filename: str, start_line: int, end_line: int, depth: int, include_functions=True, include_classes=True, include_variables=True, sort=None)",
+      "is_public_api": true,
+      "methods": ""
+    },
+    {
+      "id": "expand.arg_parser",
+      "type": "function",
+      "parent": "expand",
+      "path": "/Users/ph/Documents/ctxclip/ctxclip/expand.py",
+      "line_start": 472,
+      "line_end": 551,
+      "code": "",
+      "depth": "",
+      "docstring": "parse args",
+      "signature": "(parser=None)",
+      "is_public_api": true,
+      "methods": ""
+    },
+    {
+      "id": "expand.main",
+      "type": "function",
+      "parent": "expand",
+      "path": "/Users/ph/Documents/ctxclip/ctxclip/expand.py",
+      "line_start": 554,
+      "line_end": 593,
+      "code": "",
+      "depth": "",
+      "docstring": "cli entrypoint",
+      "signature": "(args=None)",
+      "is_public_api": true,
+      "methods": ""
+    },
+    {
+      "id": "snapshot.DebugSnapshot",
+      "type": "class",
+      "parent": "snapshot",
+      "path": "/Users/ph/Documents/ctxclip/ctxclip/snapshot.py",
+      "line_start": 13,
+      "line_end": 104,
+      "code": "# From /Users/ph/Documents/ctxclip/ctxclip/snapshot.py\nclass DebugSnapshot:\n    def __init__(self, snapshot_dir=\"debug_snapshots\"):\n        self.snapshot_dir = snapshot_dir\n        if not os.path.exists(snapshot_dir):\n            os.makedirs(snapshot_dir)\n\n    def capture(self, label=None):\n        \"\"\"Capture the current state including local/global variables and call stack\"\"\"\n        # Get the frame of the caller\n        frame = inspect.currentframe().f_back\n\n        # Generate timestamp and filename\n        timestamp = datetime.datetime.now().strftime(\"%Y%m%d_%H%M%S\")\n        filename = f\"{timestamp}\"\n        if label:\n            filename += f\"_{label}\"\n        filename += \".snapshot\"\n        filepath = os.path.join(self.snapshot_dir, filename)\n\n        # Capture stack trace\n        stack_trace = traceback.format_stack()\n\n        # Capture local and global variables\n        locals_copy = frame.f_locals.copy()\n        globals_copy = frame.f_globals.copy()\n\n        # Filter out non-picklable objects\n        filtered_locals = self._filter_picklable(locals_copy)\n        filtered_globals = self._filter_picklable(globals_copy)\n\n        # Create snapshot data\n        snapshot_data = {\n            \"timestamp\": timestamp,\n            \"label\": label,\n            \"stack_trace\": stack_trace,\n            \"locals\": filtered_locals,\n            \"globals\": filtered_globals,\n            \"filename\": frame.f_code.co_filename,\n            \"lineno\": frame.f_lineno,\n            \"function\": frame.f_code.co_name,\n        }\n\n        # Save snapshot\n        with open(filepath, \"wb\") as f:\n            pickle.dump(snapshot_data, f)\n\n        print(f\"Debug snapshot saved to {filepath}\")\n        return filepath, snapshot_data\n\n    def _filter_picklable(self, data_dict):\n        \"\"\"Filter out objects that can't be pickled\"\"\"\n        filtered = {}\n        for key, value in data_dict.items():\n            try:\n                # Test if object is picklable\n                pickle.dumps(value)\n                filtered[key] = value\n            except:\n                filtered[key] = f\"<Unpicklable object of type {type(value).__name__}>\"\n        return filtered\n\n    @staticmethod\n    def load(filepath):\n        \"\"\"Load a snapshot from file\"\"\"\n        with open(filepath, \"rb\") as f:\n            snapshot_data = pickle.load(f)\n        return snapshot_data\n\n    @staticmethod\n    def print_snapshot(snapshot_data):\n        \"\"\"Print the contents of a snapshot in a readable format\"\"\"\n        print(\"\\n\" + \"=\" * 50)\n        print(f\"Debug Snapshot: {snapshot_data.get('label', 'Unnamed')}\")\n        print(f\"Captured at: {snapshot_data['timestamp']}\")\n        print(\n            f\"Location: {snapshot_data['filename']}:{snapshot_data['lineno']} in {snapshot_data['function']}\"\n        )\n\n        print(\"\\nCall Stack:\")\n        for line in snapshot_data[\"stack_trace\"]:\n            print(f\"  {line.strip()}\")\n\n        print(\"\\nLocal Variables:\")\n        for key, value in snapshot_data[\"locals\"].items():\n            print(f\"  {key} = {value}\")\n\n        print(\"\\nGlobal Variables (selected):\")\n        # Print only a subset of globals to avoid overwhelming output\n        for key, value in list(snapshot_data[\"globals\"].items())[:20]:\n            if not key.startswith(\"__\"):\n                print(f\"  {key} = {value}\")\n        print(\"=\" * 50)",
+      "depth": 1,
+      "docstring": "",
+      "signature": "",
+      "is_public_api": true,
+      "methods": [
+        "__init__",
+        "capture",
+        "load",
+        "print_snapshot"
+      ]
+    },
+    {
+      "id": "snapshot.create_snapshot_cli",
+      "type": "function",
+      "parent": "snapshot",
+      "path": "/Users/ph/Documents/ctxclip/ctxclip/snapshot.py",
+      "line_start": 111,
+      "line_end": 172,
+      "code": "",
+      "depth": "",
+      "docstring": "",
+      "signature": "()",
+      "is_public_api": true,
+      "methods": ""
+    },
+    {
+      "id": "snapshot.inject_snapshot_code",
+      "type": "function",
+      "parent": "snapshot",
+      "path": "/Users/ph/Documents/ctxclip/ctxclip/snapshot.py",
+      "line_start": 175,
+      "line_end": 238,
+      "code": "# From /Users/ph/Documents/ctxclip/ctxclip/snapshot.py\ndef inject_snapshot_code(file_path, line_num, label=None, output_dir=\"debug_snapshots\"):\n    # TODO we can make this cleaner by isolating the full debugsnapshot source in it's own file\n    debugger_code = \"\\n\\n\".join(\n        [\n            \"\\n\".join(\n                [\n                    \"import inspect\",\n                    \"import traceback\",\n                    \"import pickle\",\n                    \"import os\",\n                    \"import datetime\",\n                    \"import sys\",\n                ]\n            ),\n            inspect.getsource(DebugSnapshot),\n            f\"_snapshot_debugger = DebugSnapshot('{output_dir}');\",\n        ]\n    )\n    # Read the original file\n    with open(file_path, \"r\") as f:\n        lines = f.readlines()\n\n    # Determine indentation of the target line\n    if line_num <= len(lines) and line_num > 0:\n        # Get the indentation of the target line\n        target_line = lines[line_num - 1] if line_num <= len(lines) else \"\"\n        indentation = \"\"\n        for char in target_line:\n            if char in (\" \", \"\\t\"):\n                indentation += char\n            else:\n                break\n\n        # Check if the line ends with a colon (indicating a new block)\n        if target_line.rstrip().endswith(\":\"):\n            # If it's a new block, we need to add more indentation\n            indentation += \"    \"  # Add 4 spaces for a new indentation level\n\n        # Insert the snapshot call with proper indentation\n        label_str = f'\"{label}\"' if label else \"None\"\n        snapshot_line = f\"{indentation}_snapshot_debugger.capture({label_str})  # Injected snapshot call\\n\"\n\n        if line_num <= len(lines):\n            lines.insert(line_num, snapshot_line)\n        else:\n            lines.append(snapshot_line)\n    else:\n        # Handle invalid line numbers\n        print(\n            f\"Warning: Line number {line_num} is out of range. Adding snapshot at the end.\"\n        )\n        lines.append(\n            f\"_snapshot_debugger.capture({label_str if 'label_str' in locals() else 'None'})  # Injected snapshot call\\n\"\n        )\n\n    # Create a temporary file\n    temp_fd, temp_path = tempfile.mkstemp(suffix=\".py\", prefix=\"_snapshot_\")\n    os.close(temp_fd)\n\n    # Combine the debugger code with the modified content\n    with open(temp_path, \"w\") as f:\n        f.write(debugger_code + \"\\n\" + \"\".join(lines))\n\n    return temp_path",
+      "depth": 1,
+      "docstring": "",
+      "signature": "(file_path, line_num, label=None, output_dir='debug_snapshots')",
+      "is_public_api": true,
+      "methods": ""
+    },
+    {
+      "id": "snapshot.extract_snapshot_path",
+      "type": "function",
+      "parent": "snapshot",
+      "path": "/Users/ph/Documents/ctxclip/ctxclip/snapshot.py",
+      "line_start": 241,
+      "line_end": 246,
+      "code": "# From /Users/ph/Documents/ctxclip/ctxclip/snapshot.py\ndef extract_snapshot_path(output):\n    # Extract the snapshot file path from the output\n    match = re.search(r\"DEBUG_SNAPSHOT_PATH: (.+)$\", output, re.MULTILINE)\n    if match:\n        return match.group(1).strip()\n    return None",
+      "depth": 1,
+      "docstring": "",
+      "signature": "(output)",
+      "is_public_api": true,
+      "methods": ""
+    },
+    {
+      "id": "node_id",
+      "type": "variable",
+      "parent": "",
+      "path": "",
+      "line_start": 247,
+      "line_end": 247,
+      "code": "# From /Users/ph/Documents/ctxclip/ctxclip/graph.py\n                            node_id = standardize_node_id(qualified_name)",
+      "depth": 1,
+      "docstring": "",
+      "signature": "",
+      "is_public_api": "",
+      "methods": ""
+    },
+    {
+      "id": "primary_node",
+      "type": "variable",
+      "parent": "",
+      "path": "",
+      "line_start": 51,
+      "line_end": 51,
+      "code": "# From /Users/ph/Documents/ctxclip/ctxclip/graph.py\n            primary_node = max(node_ids, key=lambda x: x.count(\".\"))",
+      "depth": 1,
+      "docstring": "",
+      "signature": "",
+      "is_public_api": "",
+      "methods": ""
+    },
+    {
+      "id": "project_path",
+      "type": "variable",
+      "parent": "",
+      "path": "",
+      "line_start": 194,
+      "line_end": 194,
+      "code": "# From /Users/ph/Documents/ctxclip/ctxclip/graph.py\n        project_path = Path(project_path).resolve()",
+      "depth": 1,
+      "docstring": "",
+      "signature": "",
+      "is_public_api": "",
+      "methods": ""
+    },
+    {
+      "id": "source",
+      "type": "variable",
+      "parent": "",
+      "path": "",
+      "line_start": 326,
+      "line_end": 326,
+      "code": "# From /Users/ph/Documents/ctxclip/ctxclip/interface.py\n        source = f.read()",
+      "depth": 1,
+      "docstring": "",
+      "signature": "",
+      "is_public_api": "",
+      "methods": ""
+    },
+    {
+      "id": "data",
+      "type": "variable",
+      "parent": "",
+      "path": "",
+      "line_start": 406,
+      "line_end": 406,
+      "code": "# From /Users/ph/Documents/ctxclip/ctxclip/graph.py\n        data = nx.node_link_data(self.graph)",
+      "depth": 1,
+      "docstring": "",
+      "signature": "",
+      "is_public_api": "",
+      "methods": ""
+    },
+    {
+      "id": "process_package",
+      "type": "function",
+      "parent": "",
+      "path": "",
+      "line_start": 595,
+      "line_end": 610,
+      "code": "# From /Users/ph/Documents/ctxclip/ctxclip/graph.py\n        def process_package(pkg_info, prefix):\n            for mod_name, mod_info in pkg_info.get(\"modules\", {}).items():\n                full_prefix = f\"{prefix}.{mod_name}\" if prefix else mod_name\n\n                # Process module contents (similar to above)\n                for class_name, class_info in mod_info.get(\"classes\", {}).items():\n                    # Similar processing as above but with updated prefix\n                    pass\n\n                # Process functions and variables similarly\n\n            # Recursively process subpackages\n            for subpkg_name, subpkg_info in pkg_info.get(\"packages\", {}).items():\n                new_prefix = f\"{prefix}.{subpkg_name}\" if prefix else subpkg_name\n                # pylint: disable=cell-var-from-loop\n                process_package(subpkg_info, new_prefix)",
+      "depth": 1,
+      "docstring": "",
+      "signature": "",
+      "is_public_api": "",
+      "methods": ""
+    },
+    {
+      "id": "api",
+      "type": "variable",
+      "parent": "",
+      "path": "",
+      "line_start": 579,
+      "line_end": 579,
+      "code": "# From /Users/ph/Documents/ctxclip/ctxclip/interface.py\n        api = extract_module_api(package_path)",
+      "depth": 1,
+      "docstring": "",
+      "signature": "",
+      "is_public_api": "",
+      "methods": ""
+    },
+    {
+      "id": "parser",
+      "type": "variable",
+      "parent": "",
+      "path": "",
+      "line_start": 641,
+      "line_end": 641,
+      "code": "# From /Users/ph/Documents/ctxclip/ctxclip/graph.py\n        parser = arg_parser()",
+      "depth": 1,
+      "docstring": "",
+      "signature": "",
+      "is_public_api": "",
+      "methods": ""
+    },
+    {
+      "id": "args",
+      "type": "variable",
+      "parent": "",
+      "path": "",
+      "line_start": 642,
+      "line_end": 642,
+      "code": "# From /Users/ph/Documents/ctxclip/ctxclip/graph.py\n        args = parser.parse_args()",
+      "depth": 1,
+      "docstring": "",
+      "signature": "",
+      "is_public_api": "",
+      "methods": ""
+    },
+    {
+      "id": "file_path",
+      "type": "variable",
+      "parent": "",
+      "path": "",
+      "line_start": 200,
+      "line_end": 200,
+      "code": "# From /Users/ph/Documents/ctxclip/ctxclip/graph.py\n                    file_path = Path(root) / file",
+      "depth": 1,
+      "docstring": "",
+      "signature": "",
+      "is_public_api": "",
+      "methods": ""
+    },
+    {
+      "id": "package_path",
+      "type": "variable",
+      "parent": "",
+      "path": "",
+      "line_start": 644,
+      "line_end": 644,
+      "code": "# From /Users/ph/Documents/ctxclip/ctxclip/graph.py\n    package_path = args.package",
+      "depth": 1,
+      "docstring": "",
+      "signature": "",
+      "is_public_api": "",
+      "methods": ""
+    },
+    {
+      "id": "is_package",
+      "type": "variable",
+      "parent": "",
+      "path": "",
+      "line_start": 570,
+      "line_end": 570,
+      "code": "# From /Users/ph/Documents/ctxclip/ctxclip/interface.py\n    is_package = path.is_dir() and (path / \"__init__.py\").exists()",
+      "depth": 1,
+      "docstring": "",
+      "signature": "",
+      "is_public_api": "",
+      "methods": ""
+    },
+    {
+      "id": "arg_parser",
+      "type": "function",
+      "parent": "",
+      "path": "",
+      "line_start": 617,
+      "line_end": 635,
+      "code": "# From /Users/ph/Documents/ctxclip/ctxclip/graph.py\ndef arg_parser(parser=None):\n    \"\"\"arg parser\"\"\"\n    if not parser:\n        parser = argparse.ArgumentParser(\n            description=\"Generate a dependency graph for a Python package\",\n        )\n    parser.add_argument(\n        \"package\", help=\"Path to the package or module to generate graph\"\n    )\n    parser.add_argument(\"--output\", \"-o\", help=\"output file\")\n    parser.add_argument(\n        \"--format\",\n        \"-f\",\n        choices=[\"json\", \"dot\", \"d3\"],\n        default=\"d3\",\n        help=\"output file format (json, dot, d3)\",\n    )\n    parser.add_argument(\"--deep\", \"-a\", help=\"combined analysis\")\n    return parser",
+      "depth": 1,
+      "docstring": "",
+      "signature": "",
+      "is_public_api": "",
+      "methods": ""
+    },
+    {
+      "id": "lines",
+      "type": "variable",
+      "parent": "",
+      "path": "",
+      "line_start": 304,
+      "line_end": 304,
+      "code": "# From /Users/ph/Documents/ctxclip/ctxclip/expand.py\n        lines = f.readlines()",
+      "depth": 1,
+      "docstring": "",
+      "signature": "",
+      "is_public_api": "",
+      "methods": ""
+    },
+    {
+      "id": "include_variables",
+      "type": "variable",
+      "parent": "",
+      "path": "",
+      "line_start": 577,
+      "line_end": 577,
+      "code": "# From /Users/ph/Documents/ctxclip/ctxclip/expand.py\n            include_variables = False",
+      "depth": 1,
+      "docstring": "",
+      "signature": "",
+      "is_public_api": "",
+      "methods": ""
+    },
+    {
+      "id": "include_functions",
+      "type": "variable",
+      "parent": "",
+      "path": "",
+      "line_start": 573,
+      "line_end": 573,
+      "code": "# From /Users/ph/Documents/ctxclip/ctxclip/expand.py\n            include_functions = False",
+      "depth": 1,
+      "docstring": "",
+      "signature": "",
+      "is_public_api": "",
+      "methods": ""
+    },
+    {
+      "id": "include_classes",
+      "type": "variable",
+      "parent": "",
+      "path": "",
+      "line_start": 575,
+      "line_end": 575,
+      "code": "# From /Users/ph/Documents/ctxclip/ctxclip/expand.py\n            include_classes = False",
+      "depth": 1,
+      "docstring": "",
+      "signature": "",
+      "is_public_api": "",
+      "methods": ""
+    },
+    {
+      "id": "package_dir",
+      "type": "variable",
+      "parent": "",
+      "path": "",
+      "line_start": 375,
+      "line_end": 375,
+      "code": "# From /Users/ph/Documents/ctxclip/ctxclip/expand.py\n    package_dir = os.path.dirname(file_path)",
+      "depth": 1,
+      "docstring": "",
+      "signature": "",
+      "is_public_api": "",
+      "methods": ""
+    },
+    {
+      "id": "all_definitions",
+      "type": "variable",
+      "parent": "",
+      "path": "",
+      "line_start": 376,
+      "line_end": 381,
+      "code": "# From /Users/ph/Documents/ctxclip/ctxclip/expand.py\n    all_definitions = collect_all_definitions(\n        package_dir,\n        include_functions=include_functions,\n        include_classes=include_classes,\n        include_variables=include_variables,\n    )",
+      "depth": 1,
+      "docstring": "",
+      "signature": "",
+      "is_public_api": "",
+      "methods": ""
+    },
+    {
+      "id": "process_level",
+      "type": "function",
+      "parent": "",
+      "path": "",
+      "line_start": 274,
+      "line_end": 294,
+      "code": "# From /Users/ph/Documents/ctxclip/ctxclip/expand.py\n    def process_level(references: Set[str], current_depth: int):\n        if current_depth > max_depth:\n            return\n\n        next_level_refs = set()\n\n        for ref in references:\n            if ref in all_definitions and ref not in result:\n                # Add this definition to our results\n                context = all_definitions[ref]\n                context.depth = current_depth\n                result[ref] = context\n\n                # Extract references from this definition for the next level\n                if current_depth < max_depth:\n                    refs_in_def = extract_references_from_code(context)\n                    next_level_refs.update(refs_in_def)\n\n        # Process the next level if we have references and haven't reached max depth\n        if next_level_refs and current_depth < max_depth:\n            process_level(next_level_refs, current_depth + 1)",
+      "depth": 1,
+      "docstring": "",
+      "signature": "",
+      "is_public_api": "",
+      "methods": ""
+    },
+    {
+      "id": "current_depth",
+      "type": "variable",
+      "parent": "",
+      "path": "",
+      "line_start": 451,
+      "line_end": 451,
+      "code": "# From /Users/ph/Documents/ctxclip/ctxclip/expand.py\n            current_depth = depth",
+      "depth": 1,
+      "docstring": "",
+      "signature": "",
+      "is_public_api": "",
+      "methods": ""
+    },
+    {
+      "id": "references",
+      "type": "variable",
+      "parent": "",
+      "path": "",
+      "line_start": 331,
+      "line_end": 331,
+      "code": "# From /Users/ph/Documents/ctxclip/ctxclip/expand.py\n            references = set()",
+      "depth": 1,
+      "docstring": "",
+      "signature": "",
+      "is_public_api": "",
+      "methods": ""
+    },
+    {
+      "id": "filename",
+      "type": "variable",
+      "parent": "",
+      "path": "",
+      "line_start": 26,
+      "line_end": 26,
+      "code": "# From /Users/ph/Documents/ctxclip/ctxclip/snapshot.py\n        filename = f\"{timestamp}\"",
+      "depth": 1,
+      "docstring": "",
+      "signature": "",
+      "is_public_api": "",
+      "methods": ""
+    },
+    {
+      "id": "output",
+      "type": "variable",
+      "parent": "",
+      "path": "",
+      "line_start": 579,
+      "line_end": 588,
+      "code": "# From /Users/ph/Documents/ctxclip/ctxclip/expand.py\n    output = expand_to_markdown(\n        args.file,\n        args.start_line,\n        args.end_line,\n        args.depth,\n        include_functions=include_functions,\n        include_classes=include_classes,\n        include_variables=include_variables,\n        sort=args.sort,\n    )",
+      "depth": 1,
+      "docstring": "",
+      "signature": "",
+      "is_public_api": "",
+      "methods": ""
+    }
+  ],
+  "links": [
+    {
+      "source": "graph",
+      "target": "pathlib.Path",
+      "type": "import_object"
+    },
+    {
+      "source": "graph",
+      "target": "ctxclip.interface",
+      "type": "import_object"
+    },
+    {
+      "source": "graph",
+      "target": "ctxclip.expand",
+      "type": "import_object"
+    },
+    {
+      "source": "graph",
+      "target": "graph.standardize_node_id",
+      "type": "defines"
+    },
+    {
+      "source": "graph",
+      "target": "graph.merge_duplicate_nodes",
+      "type": "defines"
+    },
+    {
+      "source": "graph",
+      "target": "graph._redirect_edges_and_remove",
+      "type": "defines"
+    },
+    {
+      "source": "graph",
+      "target": "graph.DependencyGraphGenerator",
+      "type": "defines"
+    },
+    {
+      "source": "graph",
+      "target": "graph.analyze_codebase",
+      "type": "defines"
+    },
+    {
+      "source": "graph",
+      "target": "graph.arg_parser",
+      "type": "defines"
+    },
+    {
+      "source": "graph",
+      "target": "graph.main",
+      "type": "defines"
+    },
+    {
+      "source": "interface",
+      "target": "pathlib.Path",
+      "type": "import_object"
+    },
+    {
+      "source": "interface",
+      "target": "typing.Dict",
+      "type": "import_object"
+    },
+    {
+      "source": "interface",
+      "target": "typing.Any",
+      "type": "import_object"
+    },
+    {
+      "source": "interface",
+      "target": "interface.APIExtractor",
+      "type": "defines"
+    },
+    {
+      "source": "interface",
+      "target": "interface.extract_module_api",
+      "type": "defines"
+    },
+    {
+      "source": "interface",
+      "target": "interface.extract_package_api",
+      "type": "defines"
+    },
+    {
+      "source": "interface",
+      "target": "interface.generate_markdown",
+      "type": "defines"
+    },
+    {
+      "source": "interface",
+      "target": "interface._generate_module_markdown",
+      "type": "defines"
+    },
+    {
+      "source": "interface",
+      "target": "interface.arg_parser",
+      "type": "defines"
+    },
+    {
+      "source": "interface",
+      "target": "interface.document",
+      "type": "defines"
+    },
+    {
+      "source": "interface",
+      "target": "interface.main",
+      "type": "defines"
+    },
+    {
+      "source": "__init__",
+      "target": "ctxclip.main.*",
+      "type": "import_object"
+    },
+    {
+      "source": "__init__",
+      "target": "ctxclip.expand.*",
+      "type": "import_object"
+    },
+    {
+      "source": "__init__",
+      "target": "ctxclip.interface.*",
+      "type": "import_object"
+    },
+    {
+      "source": "main",
+      "target": "ctxclip.expand.arg_parser",
+      "type": "import_object"
+    },
+    {
+      "source": "main",
+      "target": "ctxclip.expand.main",
+      "type": "import_object"
+    },
+    {
+      "source": "main",
+      "target": "ctxclip.interface.arg_parser",
+      "type": "import_object"
+    },
+    {
+      "source": "main",
+      "target": "ctxclip.interface.main",
+      "type": "import_object"
+    },
+    {
+      "source": "main",
+      "target": "ctxclip.graph.arg_parser",
+      "type": "import_object"
+    },
+    {
+      "source": "main",
+      "target": "ctxclip.graph.main",
+      "type": "import_object"
+    },
+    {
+      "source": "main",
+      "target": "main.main",
+      "type": "defines"
+    },
+    {
+      "source": "expand",
+      "target": "dataclasses.dataclass",
+      "type": "import_object"
+    },
+    {
+      "source": "expand",
+      "target": "typing.Dict",
+      "type": "import_object"
+    },
+    {
+      "source": "expand",
+      "target": "typing.List",
+      "type": "import_object"
+    },
+    {
+      "source": "expand",
+      "target": "typing.Set",
+      "type": "import_object"
+    },
+    {
+      "source": "expand",
+      "target": "typing.Tuple",
+      "type": "import_object"
+    },
+    {
+      "source": "expand",
+      "target": "expand.CodeContext",
+      "type": "defines"
+    },
+    {
+      "source": "expand",
+      "target": "expand.parse_file",
+      "type": "defines"
+    },
+    {
+      "source": "expand",
+      "target": "expand.get_source_segment",
+      "type": "defines"
+    },
+    {
+      "source": "expand",
+      "target": "expand.reconstruct_function_signature",
+      "type": "defines"
+    },
+    {
+      "source": "expand",
+      "target": "expand.DefinitionCollector",
+      "type": "defines"
+    },
+    {
+      "source": "expand",
+      "target": "expand.ReferenceExtractor",
+      "type": "defines"
+    },
+    {
+      "source": "expand",
+      "target": "expand.find_package_files",
+      "type": "defines"
+    },
+    {
+      "source": "expand",
+      "target": "expand.collect_all_definitions",
+      "type": "defines"
+    },
+    {
+      "source": "expand",
+      "target": "expand.extract_references_from_code",
+      "type": "defines"
+    },
+    {
+      "source": "expand",
+      "target": "expand.expand_context_recursive",
+      "type": "defines"
+    },
+    {
+      "source": "expand",
+      "target": "expand.extract_references_from_range",
+      "type": "defines"
+    },
+    {
+      "source": "expand",
+      "target": "expand.expand_context",
+      "type": "defines"
+    },
+    {
+      "source": "expand",
+      "target": "expand.expand_to_markdown",
+      "type": "defines"
+    },
+    {
+      "source": "expand",
+      "target": "expand.arg_parser",
+      "type": "defines"
+    },
+    {
+      "source": "expand",
+      "target": "expand.main",
+      "type": "defines"
+    },
+    {
+      "source": "snapshot",
+      "target": "snapshot.DebugSnapshot",
+      "type": "defines"
+    },
+    {
+      "source": "snapshot",
+      "target": "snapshot.create_snapshot_cli",
+      "type": "defines"
+    },
+    {
+      "source": "snapshot",
+      "target": "snapshot.inject_snapshot_code",
+      "type": "defines"
+    },
+    {
+      "source": "snapshot",
+      "target": "snapshot.extract_snapshot_path",
+      "type": "defines"
+    },
+    {
+      "source": "graph.analyze_codebase",
+      "target": "graph.DependencyGraphGenerator",
+      "type": "calls"
+    },
+    {
+      "source": "graph.analyze_codebase",
+      "target": "graph.merge_duplicate_nodes",
+      "type": "calls"
+    },
+    {
+      "source": "graph.analyze_codebase",
+      "target": "graph.standardize_node_id",
+      "type": "calls"
+    },
+    {
+      "source": "graph.main",
+      "target": "graph.analyze_codebase",
+      "type": "calls"
+    },
+    {
+      "source": "graph.main",
+      "target": "graph.arg_parser",
+      "type": "calls"
+    },
+    {
+      "source": "interface.extract_module_api",
+      "target": "interface.APIExtractor",
+      "type": "calls"
+    },
+    {
+      "source": "interface.extract_package_api",
+      "target": "pathlib.Path",
+      "type": "calls"
+    },
+    {
+      "source": "interface.extract_package_api",
+      "target": "interface.extract_module_api",
+      "type": "calls"
+    },
+    {
+      "source": "interface.extract_package_api",
+      "target": "interface.extract_package_api",
+      "type": "calls"
+    },
+    {
+      "source": "interface.generate_markdown",
+      "target": "interface.generate_markdown",
+      "type": "calls"
+    },
+    {
+      "source": "interface.document",
+      "target": "pathlib.Path",
+      "type": "calls"
+    },
+    {
+      "source": "interface.document",
+      "target": "interface.extract_package_api",
+      "type": "calls"
+    },
+    {
+      "source": "interface.document",
+      "target": "interface.generate_markdown",
+      "type": "calls"
+    },
+    {
+      "source": "interface.document",
+      "target": "interface.extract_module_api",
+      "type": "calls"
+    },
+    {
+      "source": "interface.main",
+      "target": "interface.document",
+      "type": "calls"
+    },
+    {
+      "source": "interface.main",
+      "target": "interface.arg_parser",
+      "type": "calls"
+    },
+    {
+      "source": "main.main",
+      "target": "ctxclip.expand.arg_parser",
+      "type": "calls"
+    },
+    {
+      "source": "main.main",
+      "target": "ctxclip.interface.arg_parser",
+      "type": "calls"
+    },
+    {
+      "source": "main.main",
+      "target": "ctxclip.graph.arg_parser",
+      "type": "calls"
+    },
+    {
+      "source": "main.main",
+      "target": "ctxclip.expand.main",
+      "type": "calls"
+    },
+    {
+      "source": "main.main",
+      "target": "ctxclip.interface.main",
+      "type": "calls"
+    },
+    {
+      "source": "main.main",
+      "target": "ctxclip.graph.main",
+      "type": "calls"
+    },
+    {
+      "source": "expand.collect_all_definitions",
+      "target": "expand.find_package_files",
+      "type": "calls"
+    },
+    {
+      "source": "expand.collect_all_definitions",
+      "target": "expand.parse_file",
+      "type": "calls"
+    },
+    {
+      "source": "expand.collect_all_definitions",
+      "target": "expand.DefinitionCollector",
+      "type": "calls"
+    },
+    {
+      "source": "expand.extract_references_from_code",
+      "target": "expand.ReferenceExtractor",
+      "type": "calls"
+    },
+    {
+      "source": "expand.expand_context_recursive",
+      "target": "expand.extract_references_from_code",
+      "type": "calls"
+    },
+    {
+      "source": "expand.extract_references_from_range",
+      "target": "expand.ReferenceExtractor",
+      "type": "calls"
+    },
+    {
+      "source": "expand.expand_context",
+      "target": "expand.extract_references_from_range",
+      "type": "calls"
+    },
+    {
+      "source": "expand.expand_context",
+      "target": "expand.collect_all_definitions",
+      "type": "calls"
+    },
+    {
+      "source": "expand.expand_context",
+      "target": "expand.expand_context_recursive",
+      "type": "calls"
+    },
+    {
+      "source": "expand.expand_to_markdown",
+      "target": "expand.expand_context",
+      "type": "calls"
+    },
+    {
+      "source": "expand.main",
+      "target": "expand.expand_to_markdown",
+      "type": "calls"
+    },
+    {
+      "source": "expand.main",
+      "target": "expand.arg_parser",
+      "type": "calls"
+    }
+  ]
+}

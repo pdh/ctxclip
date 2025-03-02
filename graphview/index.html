@@ -1,0 +1,129 @@
+<!DOCTYPE html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Dependency Graph Visualization</title>
+    <script src="https://d3js.org/d3.v7.min.js"></script>
+    <link href="./style.css" rel="stylesheet" />
+  </head>
+  <body>
+    <div class="file-upload-container">
+      <input type="file" id="file-input" accept=".json" />
+      <button id="load-file-btn">Load Data</button>
+    </div>
+    <div id="graph-container"></div>
+    <div id="details-panel">
+      <div class="details-content">
+        <div class="details-header">
+          <h2 id="details-title">Node Details</h2>
+          <button class="close-btn" id="close-details">&times;</button>
+        </div>
+        <div id="details-body"></div>
+      </div>
+    </div>
+    <div class="legend">
+      <h3 style="margin-top: 0">Node Types</h3>
+      <div class="legend-item">
+        <div class="legend-color" style="background-color: #1f77b4"></div>
+        <label
+          ><input
+            type="checkbox"
+            class="node-type-toggle"
+            value="module"
+            checked
+          />
+          Module</label
+        >
+      </div>
+      <div class="legend-item">
+        <div class="legend-color" style="background-color: #ff7f0e"></div>
+        <label
+            ><input
+              type="checkbox"
+              class="node-type-toggle"
+              value="object"
+              checked
+            />
+            Object</label
+          >
+      </div>
+      <div class="legend-item">
+        <div class="legend-color" style="background-color: #2ca02c"></div>
+        <label
+            ><input
+              type="checkbox"
+              class="node-type-toggle"
+              value="class"
+              checked
+            />
+            Class</label
+          >
+      </div>
+      <div class="legend-item">
+        <div class="legend-color" style="background-color: #d62728"></div>
+        <label
+            ><input
+              type="checkbox"
+              class="node-type-toggle"
+              value="function"
+              checked
+            />
+            Function</label
+          >
+      </div>
+      <h3>Link Types</h3>
+      <div class="legend-item">
+        <div class="legend-color" style="background-color: #1f77b4"></div>
+        <label
+            ><input
+              type="checkbox"
+              class="link-type-toggle"
+              value="import_object"
+              checked
+            />
+            Import Object</label
+          >
+      </div>
+      <div class="legend-item">
+        <div class="legend-color" style="background-color: #ff7f0e"></div>
+        <label
+            ><input
+              type="checkbox"
+              class="link-type-toggle"
+              value="defines"
+              checked
+            />
+            Defines</label
+          >
+      </div>
+      <div class="legend-item">
+        <div class="legend-color" style="background-color: #2ca02c"></div>
+        <label
+            ><input
+              type="checkbox"
+              class="link-type-toggle"
+              value="inherits"
+              checked
+            />
+            Inherits</label
+          >
+      </div>
+      <div class="legend-item">
+        <div class="legend-color" style="background-color: #d62728"></div>
+        <label
+            ><input
+              type="checkbox"
+              class="link-type-toggle"
+              value="calls"
+              checked
+            />
+            Calls</label
+          >
+      </div>
+    </div>
+    <div class="tooltip"></div>
+
+    <script src="./script.js"></script>
+  </body>
+</html>

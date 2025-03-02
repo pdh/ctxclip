@@ -1,0 +1,260 @@
+body {
+  font-family: Arial, sans-serif;
+  margin: 0;
+  padding: 0;
+  background-color: #f5f5f5;
+  display: flex;
+  height: 100vh;
+  overflow: hidden;
+}
+
+#graph-container {
+  flex: 1;
+  background-color: white;
+  border: 1px solid #ddd;
+  position: relative;
+}
+
+#details-panel {
+  width: 600px;
+  background-color: #f8f8f8;
+  border-left: 1px solid #ddd;
+  overflow-y: auto;
+  transition: width 0.3s ease;
+  box-shadow: -2px 0 5px rgba(0, 0, 0, 0.1);
+}
+
+.details-content {
+  padding: 20px;
+  opacity: 0;
+  transition: opacity 0.3s ease;
+}
+
+.details-content.visible {
+  opacity: 1;
+}
+
+.details-header {
+  display: grid;
+  justify-content: space-between;
+  align-items: center;
+  border-bottom: 1px solid #ddd;
+  padding-bottom: 10px;
+  margin-bottom: 15px;
+}
+
+.close-btn {
+  background: none;
+  border: none;
+  font-size: 20px;
+  cursor: pointer;
+  color: #666;
+}
+
+.close-btn:hover {
+  color: #000;
+}
+
+.node {
+  cursor: pointer;
+}
+
+.node circle {
+  stroke: #fff;
+  stroke-width: 2px;
+}
+
+.node text {
+  font-size: 12px;
+  font-weight: bold;
+}
+
+.link {
+  stroke-opacity: 0.6;
+}
+
+.legend {
+  position: absolute;
+  font-size: 10px;
+  top: 20px;
+  left: 20px;
+  background-color: rgba(255, 255, 255, 0.9);
+  border: 1px solid #ddd;
+  border-radius: 5px;
+  padding: 10px;
+  z-index: 10;
+}
+
+.legend-item {
+  display: flex;
+  align-items: center;
+  margin-bottom: 5px;
+}
+
+.legend-color {
+  width: 15px;
+  height: 15px;
+  margin-right: 8px;
+  border-radius: 50%;
+}
+
+.tooltip {
+  position: absolute;
+  background-color: rgba(0, 0, 0, 0.8);
+  color: white;
+  padding: 8px;
+  border-radius: 4px;
+  font-size: 12px;
+  pointer-events: none;
+  opacity: 0;
+  transition: opacity 0.3s;
+  z-index: 20;
+}
+
+.metadata-section {
+  margin-bottom: 15px;
+}
+
+.metadata-section h3 {
+  margin-top: 0;
+  margin-bottom: 8px;
+  color: #333;
+  border-bottom: 1px solid #eee;
+  padding-bottom: 5px;
+}
+
+.metadata-item {
+  margin-bottom: 5px;
+}
+
+.metadata-label {
+  font-weight: bold;
+  color: #555;
+}
+
+.methods-list {
+  max-height: 200px;
+  overflow-y: auto;
+  border: 1px solid #eee;
+  border-radius: 4px;
+  padding: 8px;
+  background-color: #fff;
+}
+
+.methods-list ul {
+  margin: 0;
+  padding-left: 20px;
+}
+
+pre {
+  background-color: #f1f1f1;
+  padding: 10px;
+  border-radius: 4px;
+  overflow-x: auto;
+  font-family: monospace;
+  font-size: 12px;
+}
+
+.node-selected circle {
+  stroke: #ff9900;
+  stroke-width: 3px;
+}
+
+.edge-options {
+  display: flex;
+  flex-direction: column;
+  margin: 10px 0;
+  font-size: 14px;
+}
+
+.edge-options label {
+  margin-bottom: 5px;
+  display: flex;
+  align-items: center;
+}
+
+.edge-options input {
+  margin-right: 8px;
+}
+
+.edge-item {
+  border: 1px solid #eee;
+  border-radius: 4px;
+  padding: 10px;
+  margin-bottom: 10px;
+  background-color: #f9f9f9;
+}
+
+.edge-item h4 {
+  margin-top: 0;
+  margin-bottom: 8px;
+  color: #333;
+  font-size: 14px;
+}
+
+.file-upload-container {
+  position: absolute;
+  bottom: 20px;
+  left: 20px;
+  background-color: rgba(255, 255, 255, 0.9);
+  border: 1px solid #ddd;
+  border-radius: 5px;
+  padding: 10px;
+  z-index: 10;
+  display: flex;
+  align-items: center;
+}
+
+#file-input {
+  margin-right: 10px;
+}
+
+#load-file-btn {
+  background-color: #4CAF50;
+  color: white;
+  border: none;
+  padding: 5px 10px;
+  border-radius: 4px;
+  cursor: pointer;
+}
+
+#load-file-btn:hover {
+  background-color: #45a049;
+}
+
+.filter-controls {
+  position: absolute;
+  top: 20px;
+  left: 20px;
+  background-color: rgba(255, 255, 255, 0.9);
+  border: 1px solid #ddd;
+  border-radius: 5px;
+  padding: 10px;
+  z-index: 10;
+}
+
+.filter-section {
+  font-size: 10px;
+  margin-bottom: 15px;
+}
+
+.filter-section h3 {
+  margin-top: 0;
+  margin-bottom: 8px;
+}
+
+.checkbox-group {
+  display: flex;
+  flex-direction: column;
+}
+
+.checkbox-group label {
+  margin-bottom: 5px;
+  display: flex;
+  align-items: center;
+}
+
+.checkbox-group input {
+  margin-right: 8px;
+}
+
