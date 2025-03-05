@@ -4,7 +4,7 @@
 import ast
 import os
 import tempfile
-from ctxclip import (
+from ctxclip.expand import (
     CodeContext,
     parse_file,
     DefinitionCollector,
@@ -29,7 +29,7 @@ def test_parse_file(sample_file):
 def test_definition_collector_all_types(sample_file):
     """Test that DefinitionCollector finds all definitions in a file."""
     tree, lines = parse_file(sample_file)
-    collector = DefinitionCollector(lines)
+    collector = DefinitionCollector(sample_file, lines)
     collector.visit(tree)
 
     # Check that all definitions were found
@@ -59,7 +59,11 @@ def test_filtering_functions_only(sample_file):
     """Test filtering to include only functions."""
     tree, lines = parse_file(sample_file)
     collector = DefinitionCollector(
-        lines, include_functions=True, include_classes=False, include_variables=False
+        sample_file,
+        lines,
+        include_functions=True,
+        include_classes=False,
+        include_variables=False,
     )
     collector.visit(tree)
 
@@ -79,7 +83,11 @@ def test_filtering_classes_only(sample_file):
     """Test filtering to include only classes."""
     tree, lines = parse_file(sample_file)
     collector = DefinitionCollector(
-        lines, include_functions=False, include_classes=True, include_variables=False
+        sample_file,
+        lines,
+        include_functions=False,
+        include_classes=True,
+        include_variables=False,
     )
     collector.visit(tree)
 
@@ -94,7 +102,11 @@ def test_filtering_variables_only(sample_file):
     """Test filtering to include only variables."""
     tree, lines = parse_file(sample_file)
     collector = DefinitionCollector(
-        lines, include_functions=False, include_classes=False, include_variables=True
+        sample_file,
+        lines,
+        include_functions=False,
+        include_classes=False,
+        include_variables=True,
     )
     collector.visit(tree)
 
@@ -144,21 +156,21 @@ def mock_expand_context(
     """A simplified version of expand_context for testing."""
     if max_depth == 1:
         return {
-            "sample_function": CodeContext("sample_function", "function", "", 1, 3, 1),
-            "SampleClass": CodeContext("SampleClass", "class", "", 5, 11, 1),
+            "sample_function": CodeContext("file_path", "sample_function", "function", "", 1, 3, 1),
+            "SampleClass": CodeContext("file_path", "SampleClass", "class", "", 5, 11, 1),
             "sample_variable": CodeContext(
-                "sample_variable", "variable", "", 13, 13, 1
+                "file_path", "sample_variable", "variable", "", 13, 13, 1
             ),
         }
     else:  # max_depth == 2
         return {
-            "sample_function": CodeContext("sample_function", "function", "", 1, 3, 1),
-            "SampleClass": CodeContext("SampleClass", "class", "", 5, 11, 1),
+            "sample_function": CodeContext("file_path", "sample_function", "function", "", 1, 3, 1),
+            "SampleClass": CodeContext("file_path", "SampleClass", "class", "", 5, 11, 1),
             "sample_variable": CodeContext(
-                "sample_variable", "variable", "", 13, 13, 1
+                "file_path", "sample_variable", "variable", "", 13, 13, 1
             ),
-            "get_value": CodeContext("get_value", "function", "", 9, 10, 2),
-            "value": CodeContext("value", "variable", "", 6, 7, 2),
+            "get_value": CodeContext("file_path", "get_value", "function", "", 9, 10, 2),
+            "value": CodeContext("file_path", "value", "variable", "", 6, 7, 2),
         }
 
 
@@ -242,6 +254,7 @@ def test_recursive_context_expansion(multi_file_package):
 def test_extract_references_from_code():
     """Test extracting references from a CodeContext object."""
     context = CodeContext(
+        file_path="dummy",
         name="test_function",
         type="function",
         source="def test_function():\n    result = helper_function(DataModel())\n    return result",
@@ -333,7 +346,9 @@ def test_filtering_with_regex(sample_file):
 
     # Create a collector that filters by name pattern
     collector = DefinitionCollector(
-        lines, name_pattern="sample_.*"  # Only include names starting with "sample_"
+        sample_file,
+        lines,
+        name_pattern="sample_.*",  # Only include names starting with "sample_"
     )
     collector.visit(tree)
 

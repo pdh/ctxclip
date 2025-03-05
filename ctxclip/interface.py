@@ -4,8 +4,8 @@
 import ast
 import argparse
 from pathlib import Path
-from typing import Dict, Any
-import rst2gfm
+from typing import Dict, Any, Tuple
+import rst2gfm  # used convert rst to github markdown
 
 
 class APIExtractor(ast.NodeVisitor):
@@ -13,15 +13,20 @@ class APIExtractor(ast.NodeVisitor):
 
     # pylint: disable=missing-docstring disable=invalid-name
 
-    def __init__(self, convert_to_md=False):
+    def __init__(self, source_code: str, convert_to_md=False):
         self.api = {
             "classes": {},
             "functions": {},
             "variables": {},
             "imports": {},
+            "docstring": "",
         }
         self.current_class = None
         self.convert_to_md = convert_to_md
+        self.source_lines = source_code.splitlines()
+
+    def get_code_block(self, node):
+        return "\n".join(self.source_lines[node.lineno - 1 : node.end_lineno])
 
     def visit_ClassDef(self, node):
         """Extract information from class definitions."""
@@ -41,6 +46,8 @@ class APIExtractor(ast.NodeVisitor):
             "attributes": {},
             "bases": [self._format_name(base) for base in node.bases],
         }
+        class_info["line_number"] = node.lineno
+        class_info["code_block"] = self.get_code_block(node)
 
         # Store the class info
         self.api["classes"][node.name] = class_info
@@ -57,7 +64,7 @@ class APIExtractor(ast.NodeVisitor):
         # Restore previous class context
         self.current_class = prev_class
 
-    def visit_FunctionDef(self, node):
+    def visit_FunctionDef(self, node: ast.FunctionDef | ast.AsyncFunctionDef):
         """Extract information from function definitions."""
         if node.name.startswith("_") and node.name != "__init__":
             return
@@ -67,6 +74,9 @@ class APIExtractor(ast.NodeVisitor):
             "signature": self._get_function_signature(node),
             "decorators": [self._format_name(d) for d in node.decorator_list],
         }
+
+        func_info["line_number"] = node.lineno
+        func_info["code_block"] = self.get_code_block(node)
 
         # If we're inside a class, add to methods
         if self.current_class:
@@ -90,6 +100,10 @@ class APIExtractor(ast.NodeVisitor):
                     "type": "unknown",
                     "value": self._get_value_repr(node.value),
                 }
+                self.api["variables"][target.id]["line_number"] = node.lineno
+                self.api["variables"][target.id]["code_block"] = self.get_code_block(
+                    node
+                )
 
     def visit_AnnAssign(self, node):
         """Extract annotated module-level variables."""
@@ -212,7 +226,7 @@ class APIExtractor(ast.NodeVisitor):
         elif isinstance(node, ast.Subscript):
             return f"{self._format_name(node.value)}[{self._format_name(node.slice)}]"
         elif isinstance(node, ast.Index):  # Python 3.8 and earlier
-            return self._format_name(node.value)
+            return self._format_name(node.value)  # type: ignore
         elif isinstance(node, ast.Tuple):
             return f"({', '.join(self._format_name(elt) for elt in node.elts)})"
         elif isinstance(node, ast.List):
@@ -329,7 +343,7 @@ def extract_module_api(file_path: str) -> Dict[str, Any]:
 
     try:
         tree = ast.parse(source)
-        extractor = APIExtractor()
+        extractor = APIExtractor(source)
         extractor.visit(tree)
 
         # Add module docstring
@@ -351,7 +365,7 @@ def extract_module_api(file_path: str) -> Dict[str, Any]:
         }
 
 
-def extract_package_api(package_path: str) -> Dict[str, Any]:
+def extract_package_api(path: str) -> Dict[str, Any]:
     """
     Extract the public API from a Python package.
 
@@ -361,7 +375,7 @@ def extract_package_api(package_path: str) -> Dict[str, Any]:
     Returns:
         Dictionary containing the package's public API
     """
-    package_path = Path(package_path)
+    package_path = Path(path)
 
     if package_path.is_file() and package_path.suffix == ".py":
         return {"modules": {package_path.stem: extract_module_api(str(package_path))}}
@@ -463,7 +477,7 @@ def _generate_module_markdown(api: Dict[str, Any], module_name: str) -> str:
         md += "### Classes\n\n"
 
         for class_name, class_info in sorted(api["classes"].items()):
-            md += f"#### {class_name}\n\n"
+            md += f"#### {class_name} (Line {class_info['line_number']})\n\n"
 
             if class_info.get("bases"):
                 md += f"*Bases: {', '.join(class_info['bases'])}*\n\n"
@@ -521,7 +535,8 @@ def _generate_module_markdown(api: Dict[str, Any], module_name: str) -> str:
                 if decorators:
                     decorators = f"{decorators}\n"
 
-            md += f"#### `{decorators}{func_name}{func_info['signature']}`\n\n"
+            md += f"#### `{func_name}` (Line {func_info['line_number']})\n\n"
+            md += f"`{decorators}{func_name}{func_info['signature']}`\n\n"
 
             if func_info.get("docstring"):
                 md += f"{func_info['docstring']}\n\n"
@@ -532,7 +547,8 @@ def _generate_module_markdown(api: Dict[str, Any], module_name: str) -> str:
 
         for var_name, var_info in sorted(api["variables"].items()):
             type_str = f": {var_info['type']}" if var_info["type"] != "unknown" else ""
-            md += f"#### `{var_name}{type_str}`\n\n"
+            md += f"#### `{var_name}` (Line {var_info['line_number']})\n\n"
+            md += f"`{var_name}{type_str}`\n\n"
 
             if var_info["value"] != "...":
                 md += f"Value: `{var_info['value']}`\n\n"
@@ -554,6 +570,166 @@ def _generate_module_markdown(api: Dict[str, Any], module_name: str) -> str:
     return md
 
 
+def build_package_tree(
+    api: Dict[str, Any], name: str, is_package: bool = True
+) -> Dict[str, Any]:
+    """
+    Generates a package tree
+
+    Args:
+        api: Dictionary containing the packages's API
+        name: Name of the package
+
+    Returns:
+        Tree of nodes
+    """
+    tree = {"name": name, "type": "package" if is_package else "module", "children": []}
+
+    if is_package:
+        for module_name, module_api in api.get("modules", {}).items():
+            tree["children"].append(build_package_tree(module_api, module_name, False))
+        for package_name, package_api in api.get("packages", {}).items():
+            tree["children"].append(build_package_tree(package_api, package_name, True))
+    else:
+        for class_name, class_info in api.get("classes", {}).items():
+            tree["children"].append(
+                {
+                    "name": class_name,
+                    "type": "class",
+                    "line_number": class_info["line_number"],
+                    "code_block": class_info["code_block"],
+                    "docstring": class_info.get("docstring"),
+                    "children": [
+                        {
+                            "name": method_name,
+                            "type": "method",
+                            "line_number": method_info["line_number"],
+                            "code_block": method_info["code_block"],
+                            "docstring": method_info.get("docstring"),
+                        }
+                        for method_name, method_info in class_info.get(
+                            "methods", {}
+                        ).items()
+                    ],
+                }
+            )
+        for func_name, func_info in api.get("functions", {}).items():
+            tree["children"].append(
+                {
+                    "name": func_name,
+                    "type": "function",
+                    "line_number": func_info["line_number"],
+                    "code_block": func_info["code_block"],
+                    "docstring": func_info.get("docstring"),
+                }
+            )
+        for var_name, var_info in api.get("variables", {}).items():
+            tree["children"].append(
+                {
+                    "name": var_name,
+                    "type": "variable",
+                    "line_number": var_info["line_number"],
+                    "code_block": var_info["code_block"],
+                    "docstring": var_info.get("docstring"),
+                }
+            )
+
+    return tree
+
+
+def document(package_path: str) -> Tuple[str, Dict[str, Any]]:
+    """
+    Generates a package tree
+
+    Args:
+        package_path: path to package
+
+    Returns:
+        markdown api document, tree of nodes
+    """
+    path = Path(package_path)
+    is_package = path.is_dir() and (path / "__init__.py").exists()
+    is_module = path.is_file() and path.suffix == ".py"
+
+    print(f"Extracting API from {package_path}...")
+
+    if is_package:
+        api = extract_package_api(package_path)
+        markdown = generate_markdown(api, path.name, True)
+        tree = build_package_tree(api, path.name, True)
+    elif is_module:
+        api = extract_module_api(package_path)
+        markdown = generate_markdown({"modules": {path.stem: api}}, path.stem, False)
+        tree = build_package_tree({"modules": {path.stem: api}}, path.stem, False)
+    else:
+        raise ValueError(
+            f"{package_path} is neither a valid Python package nor a module"
+        )
+
+    return markdown, tree
+
+
+def traverse_tree(tree: Dict[str, Any]):
+    """
+    Generator function to traverse the tree in a depth-first manner.
+
+    Args:
+        tree (Dict[str, Any]): The tree structure to traverse.
+
+    Yields:
+        Dict[str, Any]: Each node in the tree.
+    """
+    yield tree
+
+    if "children" in tree:
+        for child in tree["children"]:
+            yield from traverse_tree(child)
+
+
+def reconstruct_source_files(tree: Dict[str, Any], base_path: Path) -> None:
+    """
+    Reconstruct source files from a tree structure.
+
+    Args:
+        tree (Dict[str, Any]): The tree structure containing package/module information.
+        base_path (Path): The base path where the files should be reconstructed.
+    """
+    name = tree["name"]
+    node_type = tree["type"]
+
+    if node_type == "package":
+        package_path = base_path / name
+        package_path.mkdir(parents=True, exist_ok=True)
+
+        # Create __init__.py for packages
+        with open(package_path / "__init__.py", "w", encoding="utf-8") as f:
+            f.write("")
+
+        # Recursively process children
+        for child in tree.get("children", []):
+            reconstruct_source_files(child, package_path)
+
+    elif node_type == "module":
+        module_path = base_path / f"{name}.py"
+        with open(module_path, "w", encoding="utf-8") as f:
+            # Write module-level docstring if available
+            if "docstring" in tree:
+                f.write(f'"""{tree["docstring"]}"""\n\n')
+
+            # Write imports
+            for child in tree.get("children", []):
+                if child["type"] == "import":
+                    f.write(f"{child['code_block']}\n")
+            f.write("\n")
+
+            # Write classes, functions, and variables
+            for child in tree.get("children", []):
+                if child["type"] in ["class", "function", "variable"]:
+                    f.write(f"{child['code_block']}\n\n")
+
+    print(f"Reconstructed: {base_path / name}")
+
+
 def arg_parser(parser=None):
     """argument parsing"""
     if not parser:
@@ -567,27 +743,7 @@ def arg_parser(parser=None):
     return parser
 
 
-def document(package_path):
-    """generate markdown docs for package_path"""
-    path = Path(package_path)
-    is_package = path.is_dir() and (path / "__init__.py").exists()
-    is_module = path.is_file() and path.suffix == ".py"
-
-    print(f"Extracting API from {package_path}...")
-
-    if is_package:
-        api = extract_package_api(package_path)
-        markdown = generate_markdown(api, path.name, True)
-    elif is_module:
-        api = extract_module_api(package_path)
-        markdown = generate_markdown({"modules": {path.stem: api}}, path.stem, False)
-    else:
-        print(f"Error: {package_path} is neither a valid Python package nor a module")
-        return
-    return markdown
-
-
-def main(args=None):
+def main(args: argparse.Namespace | None = None) -> None:
     """cli entrypoint"""
     if not args:
         parser = arg_parser()
@@ -596,10 +752,13 @@ def main(args=None):
     package_path = args.package
     output_file = args.output
 
-    print("Generating Markdown documentation...")
-    markdown = document(package_path)
+    markdown, tree = document(package_path)
+    print(markdown)
+    if output_file:
+        with open(output_file, "w", encoding="utf-8") as f:
+            f.write(markdown)
 
-    with open(output_file, "w", encoding="utf-8") as f:
-        f.write(markdown)
-
-    print(f"Documentation written to {output_file}")
+        print(f"Documentation written to {output_file}")
+    for node in traverse_tree(tree):
+        print(f"Visiting node: {node['name']} (Type: {node['type']})")
+        # type = module, class, method, function, variable
