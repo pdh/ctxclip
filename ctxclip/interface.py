@@ -1,10 +1,12 @@
-"""ctxtc package interface doc gen
+"""
+ctxclip package interface doc gen
 """
 
 import ast
 import argparse
 from pathlib import Path
-from typing import Dict, Any, Tuple
+from typing import Dict, Any, Tuple, List, Optional
+from dataclasses import dataclass, field
 import rst2gfm  # used convert rst to github markdown
 
 
@@ -570,9 +572,19 @@ def _generate_module_markdown(api: Dict[str, Any], module_name: str) -> str:
     return md
 
 
-def build_package_tree(
-    api: Dict[str, Any], name: str, is_package: bool = True
-) -> Dict[str, Any]:
+@dataclass
+class TNode:
+    """A tree node"""
+
+    name: str
+    type: str
+    children: List["TNode"] = field(default_factory=list)
+    line_number: Optional[int] = None
+    code_block: Optional[str] = ""
+    docstring: Optional[str] = ""
+
+
+def build_package_tree(api: Dict[str, Any], name: str, is_package: bool = True) -> TNode:
     """
     Generates a package tree
 
@@ -581,63 +593,60 @@ def build_package_tree(
         name: Name of the package
 
     Returns:
-        Tree of nodes
+        A TNode tree
     """
-    tree = {"name": name, "type": "package" if is_package else "module", "children": []}
+    tree = TNode(name=name, type="package" if is_package else "module")
 
     if is_package:
         for module_name, module_api in api.get("modules", {}).items():
-            tree["children"].append(build_package_tree(module_api, module_name, False))
+            tree.children.append(build_package_tree(module_api, module_name, False))
         for package_name, package_api in api.get("packages", {}).items():
-            tree["children"].append(build_package_tree(package_api, package_name, True))
+            tree.children.append(build_package_tree(package_api, package_name, True))
     else:
         for class_name, class_info in api.get("classes", {}).items():
-            tree["children"].append(
-                {
-                    "name": class_name,
-                    "type": "class",
-                    "line_number": class_info["line_number"],
-                    "code_block": class_info["code_block"],
-                    "docstring": class_info.get("docstring"),
-                    "children": [
-                        {
-                            "name": method_name,
-                            "type": "method",
-                            "line_number": method_info["line_number"],
-                            "code_block": method_info["code_block"],
-                            "docstring": method_info.get("docstring"),
-                        }
-                        for method_name, method_info in class_info.get(
-                            "methods", {}
-                        ).items()
-                    ],
-                }
+            tree.children.append(
+                TNode(
+                    name=class_name,
+                    type="class",
+                    line_number=class_info["line_number"],
+                    code_block=class_info["code_block"],
+                    docstring=class_info['docstring'],
+                    children=[
+                        TNode(
+                            name=method_name,
+                            type='method',
+                            line_number=method_info['line_number'],
+                            code_block=method_info['code_block'],
+                            docstring=method_info.get('docstring', ''),
+                        )
+                        for method_name, method_info in class_info.get('methods', {}).items()
+                    ]
+                )
             )
         for func_name, func_info in api.get("functions", {}).items():
-            tree["children"].append(
-                {
-                    "name": func_name,
-                    "type": "function",
-                    "line_number": func_info["line_number"],
-                    "code_block": func_info["code_block"],
-                    "docstring": func_info.get("docstring"),
-                }
+            tree.children.append(
+                TNode(
+                    name=func_name,
+                    type='function',
+                    line_number=func_info['line_number'],
+                    code_block=func_info['code_block'],
+                    docstring=func_info.get('docstring', '')
+                )
             )
         for var_name, var_info in api.get("variables", {}).items():
-            tree["children"].append(
-                {
-                    "name": var_name,
-                    "type": "variable",
-                    "line_number": var_info["line_number"],
-                    "code_block": var_info["code_block"],
-                    "docstring": var_info.get("docstring"),
-                }
+            tree.children.append(
+                TNode(
+                    name=var_name,
+                    type='variable',
+                    line_number=var_info['line_number'],
+                    code_block=var_info['code_block'],
+                    docstring=var_info.get('docstring', '')
+                )
             )
-
     return tree
 
 
-def document(package_path: str) -> Tuple[str, Dict[str, Any]]:
+def document(package_path: str) -> Tuple[str, TNode]:
     """
     Generates a package tree
 
@@ -669,7 +678,7 @@ def document(package_path: str) -> Tuple[str, Dict[str, Any]]:
     return markdown, tree
 
 
-def traverse_tree(tree: Dict[str, Any]):
+def traverse_tree(tree: TNode):
     """
     Generator function to traverse the tree in a depth-first manner.
 
@@ -681,12 +690,11 @@ def traverse_tree(tree: Dict[str, Any]):
     """
     yield tree
 
-    if "children" in tree:
-        for child in tree["children"]:
-            yield from traverse_tree(child)
+    for child in tree.children:
+        yield from traverse_tree(child)
 
 
-def reconstruct_source_files(tree: Dict[str, Any], base_path: Path) -> None:
+def reconstruct_source_files(tree: TNode, base_path: Path) -> None:
     """
     Reconstruct source files from a tree structure.
 
@@ -694,8 +702,8 @@ def reconstruct_source_files(tree: Dict[str, Any], base_path: Path) -> None:
         tree (Dict[str, Any]): The tree structure containing package/module information.
         base_path (Path): The base path where the files should be reconstructed.
     """
-    name = tree["name"]
-    node_type = tree["type"]
+    name = tree.name
+    node_type = tree.type
 
     if node_type == "package":
         package_path = base_path / name
@@ -706,26 +714,28 @@ def reconstruct_source_files(tree: Dict[str, Any], base_path: Path) -> None:
             f.write("")
 
         # Recursively process children
-        for child in tree.get("children", []):
+        for child in tree.children:
             reconstruct_source_files(child, package_path)
 
     elif node_type == "module":
         module_path = base_path / f"{name}.py"
         with open(module_path, "w", encoding="utf-8") as f:
             # Write module-level docstring if available
-            if "docstring" in tree:
-                f.write(f'"""{tree["docstring"]}"""\n\n')
+            if tree.docstring:
+                f.write(f'"""{tree.docstring}"""\n\n')
 
             # Write imports
-            for child in tree.get("children", []):
-                if child["type"] == "import":
-                    f.write(f"{child['code_block']}\n")
+            for child in tree.children:
+                if child.type == "import":
+                    f.write(f"{child.code_block}\n")
             f.write("\n")
 
             # Write classes, functions, and variables
-            for child in tree.get("children", []):
-                if child["type"] in ["class", "function", "variable"]:
-                    f.write(f"{child['code_block']}\n\n")
+            for child in tree.children:
+                if child.type in ["class", "function", "variable"]:
+                    if child.docstring:
+                        f.write(f'"""{child.docstring}"""\n')
+                    f.write(f"{child.code_block}\n\n")
 
     print(f"Reconstructed: {base_path / name}")
 
@@ -760,5 +770,5 @@ def main(args: argparse.Namespace | None = None) -> None:
 
         print(f"Documentation written to {output_file}")
     for node in traverse_tree(tree):
-        print(f"Visiting node: {node['name']} (Type: {node['type']})")
+        print(f"Visiting node: {node.name} (Type: {node.type})")
         # type = module, class, method, function, variable

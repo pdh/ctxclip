@@ -132,7 +132,7 @@ def test_create_snapshot_cli(mock_run, test_environment, monkeypatch, capsys):
             mock_parse_args.return_value = args
 
             try:
-                inject.create_snapshot_cli()
+                inject.main(args=args)
             except SystemExit:
                 pass  # Expected in some cases
 
@@ -231,7 +231,7 @@ def test_file_not_found():
         "sys.argv", ["snapshot.py", "--file", "/nonexistent/file.py", "--line-num", "1"]
     ):
         with pytest.raises(SystemExit):
-            inject.create_snapshot_cli()
+            inject.main()
 
 
 def test_subprocess_error(test_environment, monkeypatch):
@@ -263,4 +263,4 @@ def test_subprocess_error(test_environment, monkeypatch):
                 mock_parse_args.return_value = args
 
                 with pytest.raises(SystemExit):
-                    inject.create_snapshot_cli()
+                    inject.main(args=args)
