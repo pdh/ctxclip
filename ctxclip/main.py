@@ -3,8 +3,8 @@
 import argparse
 from ctxclip.expand import arg_parser as expand_parser
 from ctxclip.expand import main as expand_main
-from ctxclip.interface import arg_parser as interface_parser
-from ctxclip.interface import main as interface_main
+from ctxclip.interface.interface import arg_parser as interface_parser
+from ctxclip.interface.interface import main as interface_main
 from ctxclip.graph import arg_parser as graph_parser
 from ctxclip.graph import main as graph_main
 from ctxclip.snapshot.inject import arg_parser as snapshot_parser

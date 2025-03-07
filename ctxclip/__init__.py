@@ -9,7 +9,7 @@ from ctxclip.expand import (
     expand_to_markdown,
     parse_file,
 )
-from ctxclip.interface import APIExtractor, extract_module_api, extract_package_api
+from ctxclip.interface.interface import APIExtractor, extract_module_api, extract_package_api
 from ctxclip.snapshot import snapshot_debugger, DebugSnapshot, inject_snapshot_code
 from ctxclip.graph import analyze_codebase, DependencyGraphGenerator
 

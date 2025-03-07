@@ -9,13 +9,14 @@ from ctxclip import (
     extract_module_api,
     extract_package_api,
 )
-from ctxclip.interface import (
+from ctxclip.interface.tree import (
     TNode,
     traverse_tree,
     build_package_tree,
     reconstruct_source_files,
 )
-from ctxclip.interface import _generate_module_markdown
+
+from ctxclip.interface.interface import _generate_module_markdown
 
 
 def test_class_extraction():
@@ -279,13 +280,31 @@ def test_build_package_tree():
     api = {
         "modules": {
             "module1": {
-                "classes": {"Class1": {"line_number": 1, "code_block": "", "docstring": ""}},
-                "functions": {"func1": {"line_number": 1, "code_block": "", "docstring": ""}},
-                "variables": {"var1": {"line_number": 1, "code_block": "", "docstring": ""}},
+                "classes": {
+                    "Class1": {"line_number": 1, "code_block": "", "docstring": ""}
+                },
+                "functions": {
+                    "func1": {"line_number": 1, "code_block": "", "docstring": ""}
+                },
+                "variables": {
+                    "var1": {"line_number": 1, "code_block": "", "docstring": ""}
+                },
             }
         },
         "packages": {
-            "subpkg": {"modules": {"submodule": {"functions": {"subfunc": {"line_number": 1, "code_block": "", "docstring": ""}}}}}
+            "subpkg": {
+                "modules": {
+                    "submodule": {
+                        "functions": {
+                            "subfunc": {
+                                "line_number": 1,
+                                "code_block": "",
+                                "docstring": "",
+                            }
+                        }
+                    }
+                }
+            }
         },
     }
 
@@ -319,6 +338,14 @@ def test_reconstruct_source_files(tmp_path):
         type="class",
         docstring="Class docstring",
         code_block="class TestClass:\n    pass",
+        children=[
+            TNode(
+                name="method",
+                type="method",
+                docstring="method docstring",
+                code_block="def test_method(self):\n    pass",
+            )
+        ],
     )
     function_node = TNode(
         name="test_func",
@@ -343,3 +370,5 @@ def test_reconstruct_source_files(tmp_path):
         assert "Function docstring" in content
         assert "class TestClass:" in content
         assert "def test_func():" in content
+        assert 'method docstring' in content
+        assert 'def test_method(self):\n    pass' in content

@@ -5,9 +5,9 @@ ctxclip package interface doc gen
 import ast
 import argparse
 from pathlib import Path
-from typing import Dict, Any, Tuple, List, Optional
-from dataclasses import dataclass, field
+from typing import Dict, Any, Tuple
 import rst2gfm  # used convert rst to github markdown
+from ctxclip.interface.tree import TNode, build_package_tree, traverse_tree
 
 
 class APIExtractor(ast.NodeVisitor):
@@ -15,8 +15,9 @@ class APIExtractor(ast.NodeVisitor):
 
     # pylint: disable=missing-docstring disable=invalid-name
 
-    def __init__(self, source_code: str, convert_to_md=False):
+    def __init__(self, source_code: str, file_path: str, convert_to_md=False):
         self.api = {
+            "file_path": file_path,
             "classes": {},
             "functions": {},
             "variables": {},
@@ -345,7 +346,7 @@ def extract_module_api(file_path: str) -> Dict[str, Any]:
 
     try:
         tree = ast.parse(source)
-        extractor = APIExtractor(source)
+        extractor = APIExtractor(source, file_path)
         extractor.visit(tree)
 
         # Add module docstring
@@ -380,9 +381,9 @@ def extract_package_api(path: str) -> Dict[str, Any]:
     package_path = Path(path)
 
     if package_path.is_file() and package_path.suffix == ".py":
-        return {"modules": {package_path.stem: extract_module_api(str(package_path))}}
+        return {"modules": {package_path.stem: extract_module_api(str(package_path))}, "file_path": path}
 
-    package_api = {"modules": {}, "packages": {}}
+    package_api = {"modules": {}, "packages": {}, "file_path": path}
 
     # Check if this is a package (has __init__.py)
     init_file = package_path / "__init__.py"
@@ -572,80 +573,6 @@ def _generate_module_markdown(api: Dict[str, Any], module_name: str) -> str:
     return md
 
 
-@dataclass
-class TNode:
-    """A tree node"""
-
-    name: str
-    type: str
-    children: List["TNode"] = field(default_factory=list)
-    line_number: Optional[int] = None
-    code_block: Optional[str] = ""
-    docstring: Optional[str] = ""
-
-
-def build_package_tree(api: Dict[str, Any], name: str, is_package: bool = True) -> TNode:
-    """
-    Generates a package tree
-
-    Args:
-        api: Dictionary containing the packages's API
-        name: Name of the package
-
-    Returns:
-        A TNode tree
-    """
-    tree = TNode(name=name, type="package" if is_package else "module")
-
-    if is_package:
-        for module_name, module_api in api.get("modules", {}).items():
-            tree.children.append(build_package_tree(module_api, module_name, False))
-        for package_name, package_api in api.get("packages", {}).items():
-            tree.children.append(build_package_tree(package_api, package_name, True))
-    else:
-        for class_name, class_info in api.get("classes", {}).items():
-            tree.children.append(
-                TNode(
-                    name=class_name,
-                    type="class",
-                    line_number=class_info["line_number"],
-                    code_block=class_info["code_block"],
-                    docstring=class_info['docstring'],
-                    children=[
-                        TNode(
-                            name=method_name,
-                            type='method',
-                            line_number=method_info['line_number'],
-                            code_block=method_info['code_block'],
-                            docstring=method_info.get('docstring', ''),
-                        )
-                        for method_name, method_info in class_info.get('methods', {}).items()
-                    ]
-                )
-            )
-        for func_name, func_info in api.get("functions", {}).items():
-            tree.children.append(
-                TNode(
-                    name=func_name,
-                    type='function',
-                    line_number=func_info['line_number'],
-                    code_block=func_info['code_block'],
-                    docstring=func_info.get('docstring', '')
-                )
-            )
-        for var_name, var_info in api.get("variables", {}).items():
-            tree.children.append(
-                TNode(
-                    name=var_name,
-                    type='variable',
-                    line_number=var_info['line_number'],
-                    code_block=var_info['code_block'],
-                    docstring=var_info.get('docstring', '')
-                )
-            )
-    return tree
-
-
 def document(package_path: str) -> Tuple[str, TNode]:
     """
     Generates a package tree
@@ -676,68 +603,6 @@ def document(package_path: str) -> Tuple[str, TNode]:
         )
 
     return markdown, tree
-
-
-def traverse_tree(tree: TNode):
-    """
-    Generator function to traverse the tree in a depth-first manner.
-
-    Args:
-        tree (Dict[str, Any]): The tree structure to traverse.
-
-    Yields:
-        Dict[str, Any]: Each node in the tree.
-    """
-    yield tree
-
-    for child in tree.children:
-        yield from traverse_tree(child)
-
-
-def reconstruct_source_files(tree: TNode, base_path: Path) -> None:
-    """
-    Reconstruct source files from a tree structure.
-
-    Args:
-        tree (Dict[str, Any]): The tree structure containing package/module information.
-        base_path (Path): The base path where the files should be reconstructed.
-    """
-    name = tree.name
-    node_type = tree.type
-
-    if node_type == "package":
-        package_path = base_path / name
-        package_path.mkdir(parents=True, exist_ok=True)
-
-        # Create __init__.py for packages
-        with open(package_path / "__init__.py", "w", encoding="utf-8") as f:
-            f.write("")
-
-        # Recursively process children
-        for child in tree.children:
-            reconstruct_source_files(child, package_path)
-
-    elif node_type == "module":
-        module_path = base_path / f"{name}.py"
-        with open(module_path, "w", encoding="utf-8") as f:
-            # Write module-level docstring if available
-            if tree.docstring:
-                f.write(f'"""{tree.docstring}"""\n\n')
-
-            # Write imports
-            for child in tree.children:
-                if child.type == "import":
-                    f.write(f"{child.code_block}\n")
-            f.write("\n")
-
-            # Write classes, functions, and variables
-            for child in tree.children:
-                if child.type in ["class", "function", "variable"]:
-                    if child.docstring:
-                        f.write(f'"""{child.docstring}"""\n')
-                    f.write(f"{child.code_block}\n\n")
-
-    print(f"Reconstructed: {base_path / name}")
 
 
 def arg_parser(parser=None):
