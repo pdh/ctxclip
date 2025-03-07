@@ -9,7 +9,7 @@ from pathlib import Path
 import argparse
 import traceback
 import networkx as nx
-from ctxclip import interface as api
+from ctxclip.interface import interface as api
 from ctxclip import expand
 
 
