@@ -14,10 +14,20 @@ class TNode:
     name: str
     type: str
     file_path: str
+
     children: List["TNode"] = field(default_factory=list)
+    parent: Optional["TNode"] = None
     line_number: Optional[int] = None
     code_block: Optional[str] = ""
     docstring: Optional[str] = ""
+    col_offset: Optional[int] = 0
+
+
+def find_root(node: TNode) -> TNode:
+    """Find the root node from any given node."""
+    while node.parent:
+        node = node.parent
+    return node
 
 
 def traverse_tree(tree: TNode):
@@ -105,7 +115,10 @@ def write_code_blocks(file, nodes, indent=""):
 
 
 def build_package_tree(
-    api: Dict[str, Any], name: str, is_package: bool = True
+    api: Dict[str, Any],
+    name: str,
+    is_package: bool = True,
+    parent: Optional[TNode] = None,
 ) -> TNode:
     """
     Generates a package tree
@@ -117,39 +130,51 @@ def build_package_tree(
     Returns:
         A TNode tree
     """
-    file_path = api['file_path']
-    tree = TNode(name=name, type="package" if is_package else "module", file_path=file_path)
+    file_path = api["file_path"]
+    tree = TNode(
+        name=name,
+        type="package" if is_package else "module",
+        file_path=file_path,
+        parent=parent,
+    )
 
     if is_package:
         for module_name, module_api in api.get("modules", {}).items():
-            tree.children.append(build_package_tree(module_api, module_name, False))
+            tree.children.append(
+                build_package_tree(module_api, module_name, False, tree)
+            )
         for package_name, package_api in api.get("packages", {}).items():
-            tree.children.append(build_package_tree(package_api, package_name, True))
+            tree.children.append(
+                build_package_tree(package_api, package_name, True, tree)
+            )
     else:
         for class_name, class_info in api.get("classes", {}).items():
-            tree.children.append(
-                TNode(
-                    name=class_name,
-                    type="class",
-                    file_path=file_path,
-                    line_number=class_info["line_number"],
-                    code_block=class_info["code_block"],
-                    docstring=class_info["docstring"],
-                    children=[
-                        TNode(
-                            name=method_name,
-                            type="method",
-                            file_path=file_path,
-                            line_number=method_info["line_number"],
-                            code_block=method_info["code_block"],
-                            docstring=method_info.get("docstring", ""),
-                        )
-                        for method_name, method_info in class_info.get(
-                            "methods", {}
-                        ).items()
-                    ],
-                )
+            # tree.children.append(
+            class_node = TNode(
+                name=class_name,
+                type="class",
+                file_path=file_path,
+                line_number=class_info["line_number"],
+                code_block=class_info["code_block"],
+                docstring=class_info["docstring"],
+                col_offset=class_info.get("col_offset", 0),
+                parent=tree,
             )
+            children = [
+                TNode(
+                    name=method_name,
+                    type="method",
+                    file_path=file_path,
+                    line_number=method_info["line_number"],
+                    code_block=method_info["code_block"],
+                    docstring=method_info.get("docstring", ""),
+                    col_offset=method_info.get("col_offset", 0),
+                    parent=class_node,
+                )
+                for method_name, method_info in class_info.get("methods", {}).items()
+            ]
+            class_node.children = children
+            tree.children.append(class_node)
         for func_name, func_info in api.get("functions", {}).items():
             tree.children.append(
                 TNode(
@@ -159,6 +184,8 @@ def build_package_tree(
                     line_number=func_info["line_number"],
                     code_block=func_info["code_block"],
                     docstring=func_info.get("docstring", ""),
+                    col_offset=func_info.get("col_offset", 0),
+                    parent=tree,
                 )
             )
         for var_name, var_info in api.get("variables", {}).items():
@@ -170,6 +197,28 @@ def build_package_tree(
                     line_number=var_info["line_number"],
                     code_block=var_info["code_block"],
                     docstring=var_info.get("docstring", ""),
+                    col_offset=var_info.get("col_offset", 0),
+                    parent=tree,
                 )
             )
     return tree
+
+
+def update_line_numbers(tree: TNode, file_path: str, start_line: int, delta: int):
+    """
+    Updates line numbers for all nodes in the tree with the same file path,
+    starting from a specific line.
+
+    Args:
+        tree (TNode): The root of the tree.
+        file_path (str): The file path to match.
+        start_line (int): The line number where changes start.
+        delta (int): The number of lines added (positive) or removed (negative).
+    """
+    for node in traverse_tree(tree):
+        if (
+            node.file_path == file_path
+            and node.line_number
+            and node.line_number >= start_line
+        ):
+            node.line_number += delta

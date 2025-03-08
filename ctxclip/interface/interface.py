@@ -33,17 +33,14 @@ class APIExtractor(ast.NodeVisitor):
 
     def visit_ClassDef(self, node):
         """Extract information from class definitions."""
-        if node.name.startswith("_"):
-            return
-
         # Save previous class context if we're nested
         prev_class = self.current_class
         self.current_class = node.name
-
         docstring = ast.get_docstring(node, clean=True) or ""
         if docstring and self.convert_to_md:
             docstring = rst2gfm.convert_rst_to_md(docstring)
         class_info = {
+            "col_offset": node.col_offset,
             "docstring": docstring,
             "methods": {},
             "attributes": {},
@@ -73,6 +70,7 @@ class APIExtractor(ast.NodeVisitor):
             return
 
         func_info = {
+            "col_offset": node.col_offset,
             "docstring": ast.get_docstring(node) or "",
             "signature": self._get_function_signature(node),
             "decorators": [self._format_name(d) for d in node.decorator_list],

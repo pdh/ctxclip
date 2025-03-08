@@ -35,7 +35,7 @@ class MyClass:
         return str(x)
 """
     tree = ast.parse(code)
-    extractor = APIExtractor(code, convert_to_md=False)
+    extractor = APIExtractor(code, file_path="file_path", convert_to_md=False)
     extractor.visit(tree)
 
     assert "MyClass" in extractor.api["classes"]
@@ -60,7 +60,7 @@ async def fetch_data(url: str):
     pass
 """
     tree = ast.parse(code)
-    extractor = APIExtractor(code)
+    extractor = APIExtractor(code, "file_path")
     extractor.visit(tree)
 
     assert "add" in extractor.api["functions"]
@@ -81,7 +81,7 @@ CONSTANTS = {
 }
 """
     tree = ast.parse(code)
-    extractor = APIExtractor(code)
+    extractor = APIExtractor(code, "file_path")
     extractor.visit(tree)
 
     assert "VERSION" in extractor.api["variables"]
@@ -100,7 +100,7 @@ from pathlib import Path
 from typing import List, Dict, Optional as Opt
 """
     tree = ast.parse(code)
-    extractor = APIExtractor(code)
+    extractor = APIExtractor(code, "file_path")
     extractor.visit(tree)
 
     assert "os" in extractor.api["imports"]
@@ -125,7 +125,7 @@ PUBLIC_VAR = 1
 _PRIVATE_VAR = 2
 """
     tree = ast.parse(code)
-    extractor = APIExtractor(code)
+    extractor = APIExtractor(code, "file_path")
     extractor.visit(tree)
 
     assert "public_method" in extractor.api["classes"]["MyClass"]["methods"]
@@ -247,7 +247,12 @@ def test_extract_package_api():
 def test_tnode_creation():
     """Test TNode creation and attributes"""
     node = TNode(
-        name="root", type="package", line_number=1, code_block="code", docstring="doc"
+        name="root",
+        type="package",
+        file_path="file_path",
+        line_number=1,
+        code_block="code",
+        docstring="doc",
     )
     assert node.name == "root"
     assert node.type == "package"
@@ -259,11 +264,17 @@ def test_tnode_creation():
 
 def test_tree_traversal():
     """Test tree traversal"""
-    root = TNode(name="root", type="package")
-    child1 = TNode(name="child1", type="module")
-    child2 = TNode(name="child2", type="module")
+    root = TNode(name="root", type="package", file_path="root_path")
+    child1 = TNode(name="child1", type="module", file_path="child1_path")
+    child2 = TNode(name="child2", type="module", file_path="child2_path")
     root.children = [child1, child2]
-    child1.children = [TNode(name="grandchild", type="class")]
+    child1.children = [
+        TNode(
+            name="grandchild",
+            type="class",
+            file_path="grandchild_path",
+        )
+    ]
 
     traversed = list(traverse_tree(root))
     assert len(traversed) == 4
@@ -278,28 +289,33 @@ def test_tree_traversal():
 def test_build_package_tree():
     """Test building package tree"""
     api = {
+        "file_path": "file_path",
         "modules": {
             "module1": {
+                "file_path": "file_path",
                 "classes": {
-                    "Class1": {"line_number": 1, "code_block": "", "docstring": ""}
+                    "Class1": {"line_number": 1, "code_block": "", "docstring": "", "file_path": "file_path"}
                 },
                 "functions": {
-                    "func1": {"line_number": 1, "code_block": "", "docstring": ""}
+                    "func1": {"line_number": 1, "code_block": "", "docstring": "", "file_path": "file_path"}
                 },
                 "variables": {
-                    "var1": {"line_number": 1, "code_block": "", "docstring": ""}
+                    "var1": {"line_number": 1, "code_block": "", "docstring": "", "file_path": "file_path"}
                 },
             }
         },
         "packages": {
             "subpkg": {
+                "file_path": "subpkg_path",
                 "modules": {
                     "submodule": {
+                        "file_path": "file_path",
                         "functions": {
                             "subfunc": {
                                 "line_number": 1,
                                 "code_block": "",
                                 "docstring": "",
+                                "file_path": "file_path"
                             }
                         }
                     }
@@ -326,22 +342,25 @@ def test_build_package_tree():
 
 def test_reconstruct_source_files(tmp_path):
     """Test reconstructing source files from tree"""
-    root = TNode(name="testpkg", type="package")
+    root = TNode(name="testpkg", type="package", file_path="file_path")
     module = TNode(
         name="module",
         type="module",
+        file_path="module_path",
         docstring="Module docstring",
         code_block="# Module code",
     )
     class_node = TNode(
         name="TestClass",
         type="class",
+        file_path="class_path",
         docstring="Class docstring",
         code_block="class TestClass:\n    pass",
         children=[
             TNode(
                 name="method",
                 type="method",
+                file_path="file_path",
                 docstring="method docstring",
                 code_block="def test_method(self):\n    pass",
             )
@@ -350,6 +369,7 @@ def test_reconstruct_source_files(tmp_path):
     function_node = TNode(
         name="test_func",
         type="function",
+        file_path="file_path",
         docstring="Function docstring",
         code_block="def test_func():\n    pass",
     )
@@ -370,5 +390,5 @@ def test_reconstruct_source_files(tmp_path):
         assert "Function docstring" in content
         assert "class TestClass:" in content
         assert "def test_func():" in content
-        assert 'method docstring' in content
-        assert 'def test_method(self):\n    pass' in content
+        assert "method docstring" in content
+        assert "def test_method(self):\n    pass" in content
