@@ -13,4 +13,8 @@ requires = [
 ]
 
 [project.scripts]
-ctxclip = "ctxclip.main:main"
+ctxclip = "ctxclip:main"
+
+[tool.setuptools.packages.find]
+where = ["."]
+include = ["ctxclip"]

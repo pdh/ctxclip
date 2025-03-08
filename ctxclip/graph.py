@@ -9,11 +9,11 @@ from pathlib import Path
 import argparse
 import traceback
 import networkx as nx
-from ctxclip import interface as api
+from ctxclip.interface import interface as api
 from ctxclip import expand
 
 
-def standardize_node_id(name: str, module_context: str = None):
+def standardize_node_id(name: str, module_context: str|None = None):
     """Create a standardized node ID to prevent duplication."""
     # If it's already a fully qualified name (contains a dot)
     if "." in name:
@@ -72,59 +72,6 @@ def merge_duplicate_nodes(graph):
 
                     # Redirect edges and remove the duplicate
                     _redirect_edges_and_remove(graph, node_id, primary_node)
-
-    # Second approach: merge by name (for nodes that might have different path info)
-    name_map = {}
-
-    # Group nodes by their simple name (last part after the dot)
-    for node_id in list(graph.nodes()):
-        if "." in node_id:
-            simple_name = node_id.split(".")[-1]
-            if simple_name not in name_map:
-                name_map[simple_name] = []
-            name_map[simple_name].append(node_id)
-
-    # FIXME this will incorrectly merge funcs when modules\
-    # have the same func signature
-    # # Merge nodes with the same simple name
-    # for simple_name, node_ids in name_map.items():
-    #     if len(node_ids) > 1:
-    #         # Check if these nodes might be duplicates by comparing code or other attributes
-    #         for i in range(len(node_ids)):
-    #             for j in range(i + 1, len(node_ids)):
-    #                 # node2 = node_ids[j]
-    #                 node1, node2 = node_ids[i], node_ids[j]
-    #                 # If one has code and the other doesn't, they might be duplicates
-    #                 import ipdb; ipdb.set_trace()
-    #                 if (
-    #                     graph.nodes[node1].get("code")
-    #                     and not graph.nodes[node2].get("code")
-    #                 ) or (
-    #                     graph.nodes[node2].get("code")
-    #                     and not graph.nodes[node1].get("code")
-    #                 ):
-    #                     # Choose the more qualified name (with more dots)
-    #                     primary = (
-    #                         node1 if node1.count(".") >= node2.count(".") else node2
-    #                     )
-    #                     secondary = node2 if primary == node1 else node1
-
-    #                     # Merge attributes
-    #                     for attr, value in graph.nodes[secondary].items():
-    #                         if (
-    #                             attr == "code"
-    #                             and value
-    #                             and not graph.nodes[primary].get("code")
-    #                         ):
-    #                             graph.nodes[primary]["code"] = value
-    #                         elif value and (
-    #                             attr not in graph.nodes[primary]
-    #                             or not graph.nodes[primary][attr]
-    #                         ):
-    #                             graph.nodes[primary][attr] = value
-
-    #                     # Redirect edges and remove the duplicate
-    #                     _redirect_edges_and_remove(graph, secondary, primary)
 
     return graph
 
@@ -191,9 +138,9 @@ class DependencyGraphGenerator:
 
         return canonical_id
 
-    def analyze_project(self, project_path: str) -> nx.DiGraph:
+    def analyze_project(self, path: str) -> nx.DiGraph:
         """Analyze a Python project and build a dependency graph."""
-        project_path = Path(project_path).resolve()
+        project_path = Path(path).resolve()
 
         # First pass: collect all modules
         for root, _, files in os.walk(project_path):
@@ -451,7 +398,7 @@ class DependencyGraphGenerator:
 
 
 # Integrated workflow
-def analyze_codebase(project_path):
+def analyze_codebase(project_path: str):
     """integrated workflow that gens pub api, expands context, and gens dep graph"""
     # pylint: disable=unused-variable
     # 1. Document public interfaces using the APIExtractor
@@ -526,14 +473,15 @@ def analyze_codebase(project_path):
                                 graph.add_node(
                                     std_ref_name,
                                     type=context.type,
+                                    path=context.file_path,
                                     line_start=context.line_start,
                                     line_end=context.line_end,
                                     code=context.source,
                                     depth=context.depth,
                                 )
                             else:
-                                # TODO -- maybe unnecessary
                                 # Update existing node
+                                graph.nodes[std_ref_name]['path'] = context.file_path
                                 graph.nodes[std_ref_name]["code"] = context.source
                                 graph.nodes[std_ref_name]["depth"] = context.depth
         except SyntaxError as e:
@@ -616,8 +564,8 @@ def analyze_codebase(project_path):
     return graph, graph_generator
 
 
-def arg_parser(parser=None):
-    """arg parser"""
+def arg_parser(parser: argparse.ArgumentParser|None=None) -> argparse.ArgumentParser:
+    """ctxclip.graph argument parser"""
     if not parser:
         parser = argparse.ArgumentParser(
             description="Generate a dependency graph for a Python package",
@@ -637,8 +585,15 @@ def arg_parser(parser=None):
     return parser
 
 
-def main(args=None):
-    """cli entry"""
+def main(args: argparse.Namespace|None=None) -> None:
+    """graph client main
+
+    analyzes a codebase path from args.package and
+    exports the graph in dot, json, or d3 format
+
+    if args are not provided, this will create a
+    parser with arg_parser() and parse_args()
+    """
     if not args:
         parser = arg_parser()
         args = parser.parse_args()

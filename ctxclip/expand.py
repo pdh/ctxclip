@@ -5,7 +5,7 @@ import os
 import re
 import argparse
 from dataclasses import dataclass
-from typing import Dict, List, Set, Tuple
+from typing import Dict, List, Set, Tuple, Optional
 import textwrap
 
 
@@ -13,11 +13,12 @@ import textwrap
 class CodeContext:
     """CodeContext"""
 
+    file_path: str
     name: str
     type: str  # 'function', 'class', 'variable'
     source: str
     line_start: int
-    line_end: int
+    line_end: Optional[int]
     depth: int = 0  # Recursion depth in the reference chain
     signature: str = ""
 
@@ -30,7 +31,7 @@ def parse_file(file_path: str) -> Tuple[ast.Module, List[str]]:
     return ast.parse(source), lines
 
 
-def get_source_segment(node: ast.AST, lines: List[str]) -> str:
+def get_source_segment(node: ast.stmt, lines: List[str]) -> str:
     """Extract source code for a given AST node."""
     if hasattr(node, "lineno") and hasattr(node, "end_lineno"):
         return "\n".join(lines[node.lineno - 1 : node.end_lineno])
@@ -100,12 +101,14 @@ class DefinitionCollector(ast.NodeVisitor):
 
     def __init__(
         self,
+        file_path,
         lines,
         include_functions=True,
         include_classes=True,
         include_variables=True,
         name_pattern=None,
     ):
+        self.file_path = file_path
         self.current_path = []
         self.definitions: Dict[str, CodeContext] = {}
         self.lines = lines
@@ -131,6 +134,7 @@ class DefinitionCollector(ast.NodeVisitor):
                 return
             signature = reconstruct_function_signature(node)
             self.definitions[node.name] = CodeContext(
+                file_path=self.file_path,
                 name=full_path,
                 type="function",
                 signature=signature,
@@ -147,8 +151,8 @@ class DefinitionCollector(ast.NodeVisitor):
             if self.name_regex and not self.name_regex.match(node.name):
                 self.generic_visit(node)
                 return
-
             self.definitions[node.name] = CodeContext(
+                file_path=self.file_path,
                 name=node.name,
                 type="class",
                 source=get_source_segment(node, self.lines),
@@ -166,6 +170,7 @@ class DefinitionCollector(ast.NodeVisitor):
                         continue
 
                     self.definitions[target.id] = CodeContext(
+                        file_path=self.file_path,
                         name=target.id,
                         type="variable",
                         source=get_source_segment(node, self.lines),
@@ -225,6 +230,7 @@ def collect_all_definitions(
     for py_file in package_files:
         file_tree, file_lines = parse_file(py_file)
         def_collector = DefinitionCollector(
+            py_file,
             file_lines,
             include_functions=include_functions,
             include_classes=include_classes,

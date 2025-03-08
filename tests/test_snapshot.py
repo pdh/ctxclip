@@ -7,7 +7,7 @@ from unittest.mock import patch, MagicMock
 import importlib.util
 import pytest
 
-from ctxclip import snapshot
+from ctxclip.snapshot import inject
 
 # pylint: disable=redefined-outer-name
 
@@ -48,7 +48,7 @@ def test_inject_snapshot_code(test_environment):
     test_file = test_environment["test_file"]
     test_dir = test_environment["test_dir"]
 
-    temp_file = snapshot.inject_snapshot_code(
+    temp_file = inject.inject_snapshot_code(
         test_file, line_num=3, label="test_snapshot", output_dir=test_dir
     )
 
@@ -81,12 +81,12 @@ def test_extract_snapshot_path():
     test_output = (
         "Some output\nDEBUG_SNAPSHOT_PATH: /path/to/snapshot.snapshot\nMore output"
     )
-    path = snapshot.extract_snapshot_path(test_output)
+    path = inject.extract_snapshot_path(test_output)
     assert path == "/path/to/snapshot.snapshot"
 
     # Test with no match
     no_match_output = "Some output without a snapshot path"
-    path = snapshot.extract_snapshot_path(no_match_output)
+    path = inject.extract_snapshot_path(no_match_output)
     assert path is None
 
 
@@ -99,7 +99,7 @@ def test_create_snapshot_cli(mock_run, test_environment, monkeypatch, capsys):
     # Setup mocks
     mock_temp_file = os.path.join(test_dir, "temp_script.py")
 
-    with patch("ctxclip.snapshot.inject_snapshot_code") as mock_inject:
+    with patch("ctxclip.snapshot.inject.inject_snapshot_code") as mock_inject:
         mock_inject.return_value = mock_temp_file
 
         mock_process = MagicMock()
@@ -132,7 +132,7 @@ def test_create_snapshot_cli(mock_run, test_environment, monkeypatch, capsys):
             mock_parse_args.return_value = args
 
             try:
-                snapshot.create_snapshot_cli()
+                inject.main(args=args)
             except SystemExit:
                 pass  # Expected in some cases
 
@@ -153,7 +153,7 @@ def test_filter_picklable(test_environment):
     test_dir = test_environment["test_dir"]
 
     # Create a temporary file with the snapshot debugger code
-    temp_file = snapshot.inject_snapshot_code(
+    temp_file = inject.inject_snapshot_code(
         test_file, line_num=3, output_dir=test_dir
     )
 
@@ -164,11 +164,13 @@ def test_filter_picklable(test_environment):
     # Use importlib to import the module
 
     spec = importlib.util.spec_from_file_location(temp_module_name, temp_file)
+    assert spec is not None and spec.loader is not None
     temp_module = importlib.util.module_from_spec(spec)
+    assert temp_module is not None
     spec.loader.exec_module(temp_module)
 
     # Create a DebugSnapshot instance
-    debugger = temp_module._snapshot_debugger  # pylint: disable=protected-access
+    debugger = temp_module.snapshot_debugger  # pylint: disable=protected-access
 
     # Test with picklable and non-picklable objects
     test_dict = {
@@ -204,7 +206,7 @@ def test_line_number_out_of_range(test_environment):
         num_lines = len(f.readlines())
 
     # Try to inject at a line number beyond the end of the file
-    temp_file = snapshot.inject_snapshot_code(
+    temp_file = inject.inject_snapshot_code(
         test_file, line_num=num_lines + 10, output_dir=test_dir  # Way beyond the end
     )
 
@@ -229,7 +231,7 @@ def test_file_not_found():
         "sys.argv", ["snapshot.py", "--file", "/nonexistent/file.py", "--line-num", "1"]
     ):
         with pytest.raises(SystemExit):
-            snapshot.create_snapshot_cli()
+            inject.main()
 
 
 def test_subprocess_error(test_environment, monkeypatch):
@@ -261,4 +263,4 @@ def test_subprocess_error(test_environment, monkeypatch):
                 mock_parse_args.return_value = args
 
                 with pytest.raises(SystemExit):
-                    snapshot.create_snapshot_cli()
+                    inject.main(args=args)

@@ -9,7 +9,14 @@ from ctxclip import (
     extract_module_api,
     extract_package_api,
 )
-from ctxclip.interface import _generate_module_markdown
+from ctxclip.interface.tree import (
+    TNode,
+    traverse_tree,
+    build_package_tree,
+    reconstruct_source_files,
+)
+
+from ctxclip.interface.interface import _generate_module_markdown
 
 
 def test_class_extraction():
@@ -28,7 +35,7 @@ class MyClass:
         return str(x)
 """
     tree = ast.parse(code)
-    extractor = APIExtractor(convert_to_md=False)
+    extractor = APIExtractor(code, file_path="file_path", convert_to_md=False)
     extractor.visit(tree)
 
     assert "MyClass" in extractor.api["classes"]
@@ -53,7 +60,7 @@ async def fetch_data(url: str):
     pass
 """
     tree = ast.parse(code)
-    extractor = APIExtractor()
+    extractor = APIExtractor(code, "file_path")
     extractor.visit(tree)
 
     assert "add" in extractor.api["functions"]
@@ -74,7 +81,7 @@ CONSTANTS = {
 }
 """
     tree = ast.parse(code)
-    extractor = APIExtractor()
+    extractor = APIExtractor(code, "file_path")
     extractor.visit(tree)
 
     assert "VERSION" in extractor.api["variables"]
@@ -93,7 +100,7 @@ from pathlib import Path
 from typing import List, Dict, Optional as Opt
 """
     tree = ast.parse(code)
-    extractor = APIExtractor()
+    extractor = APIExtractor(code, "file_path")
     extractor.visit(tree)
 
     assert "os" in extractor.api["imports"]
@@ -118,7 +125,7 @@ PUBLIC_VAR = 1
 _PRIVATE_VAR = 2
 """
     tree = ast.parse(code)
-    extractor = APIExtractor()
+    extractor = APIExtractor(code, "file_path")
     extractor.visit(tree)
 
     assert "public_method" in extractor.api["classes"]["MyClass"]["methods"]
@@ -159,12 +166,14 @@ def test_markdown_generation():
         "docstring": "Test module.",
         "classes": {
             "TestClass": {
+                "line_number": 3,
                 "docstring": "A test class.",
                 "methods": {
                     "test_method": {
                         "docstring": "A test method.",
                         "signature": "(self, param: str) -> None",
                         "decorators": [],
+                        "line_number": 10,
                     }
                 },
                 "attributes": {},
@@ -176,6 +185,7 @@ def test_markdown_generation():
                 "docstring": "A test function.",
                 "signature": "(param: int = 0) -> str",
                 "decorators": ["staticmethod"],
+                "line_number": 5,
             }
         },
         "variables": {},
@@ -193,7 +203,10 @@ def test_markdown_generation():
     assert "###### `test_method(self, param: str) -> None`" in md
     assert "A test method." in md
     assert "### Functions" in md
-    assert "#### `@staticmethod\ntest_function(param: int = 0) -> str`" in md
+    assert (
+        "#### `test_function` (Line 5)\n\n`@staticmethod\ntest_function(param: int = 0) -> str`"
+        in md
+    )
     assert "A test function." in md
 
 
@@ -229,3 +242,153 @@ def test_extract_package_api():
         assert "VERSION" in api["modules"]["__init__"]["variables"]
         assert api["modules"]["module"]["docstring"] == "Test module."
         assert "test_func" in api["modules"]["module"]["functions"]
+
+
+def test_tnode_creation():
+    """Test TNode creation and attributes"""
+    node = TNode(
+        name="root",
+        type="package",
+        file_path="file_path",
+        line_number=1,
+        code_block="code",
+        docstring="doc",
+    )
+    assert node.name == "root"
+    assert node.type == "package"
+    assert node.line_number == 1
+    assert node.code_block == "code"
+    assert node.docstring == "doc"
+    assert node.children == []
+
+
+def test_tree_traversal():
+    """Test tree traversal"""
+    root = TNode(name="root", type="package", file_path="root_path")
+    child1 = TNode(name="child1", type="module", file_path="child1_path")
+    child2 = TNode(name="child2", type="module", file_path="child2_path")
+    root.children = [child1, child2]
+    child1.children = [
+        TNode(
+            name="grandchild",
+            type="class",
+            file_path="grandchild_path",
+        )
+    ]
+
+    traversed = list(traverse_tree(root))
+    assert len(traversed) == 4
+    assert [node.name for node in traversed] == [
+        "root",
+        "child1",
+        "grandchild",
+        "child2",
+    ]
+
+
+def test_build_package_tree():
+    """Test building package tree"""
+    api = {
+        "file_path": "file_path",
+        "modules": {
+            "module1": {
+                "file_path": "file_path",
+                "classes": {
+                    "Class1": {"line_number": 1, "code_block": "", "docstring": "", "file_path": "file_path"}
+                },
+                "functions": {
+                    "func1": {"line_number": 1, "code_block": "", "docstring": "", "file_path": "file_path"}
+                },
+                "variables": {
+                    "var1": {"line_number": 1, "code_block": "", "docstring": "", "file_path": "file_path"}
+                },
+            }
+        },
+        "packages": {
+            "subpkg": {
+                "file_path": "subpkg_path",
+                "modules": {
+                    "submodule": {
+                        "file_path": "file_path",
+                        "functions": {
+                            "subfunc": {
+                                "line_number": 1,
+                                "code_block": "",
+                                "docstring": "",
+                                "file_path": "file_path"
+                            }
+                        }
+                    }
+                }
+            }
+        },
+    }
+
+    tree = build_package_tree(api, "testpkg", True)
+    assert tree.name == "testpkg"
+    assert tree.type == "package"
+    assert len(tree.children) == 2  # module1 and subpkg
+
+    module1 = tree.children[0]
+    assert module1.name == "module1"
+    assert module1.type == "module"
+    assert len(module1.children) == 3  # Class1, func1, var1
+
+    subpkg = tree.children[1]
+    assert subpkg.name == "subpkg"
+    assert subpkg.type == "package"
+    assert len(subpkg.children) == 1  # submodule
+
+
+def test_reconstruct_source_files(tmp_path):
+    """Test reconstructing source files from tree"""
+    root = TNode(name="testpkg", type="package", file_path="file_path")
+    module = TNode(
+        name="module",
+        type="module",
+        file_path="module_path",
+        docstring="Module docstring",
+        code_block="# Module code",
+    )
+    class_node = TNode(
+        name="TestClass",
+        type="class",
+        file_path="class_path",
+        docstring="Class docstring",
+        code_block="class TestClass:\n    pass",
+        children=[
+            TNode(
+                name="method",
+                type="method",
+                file_path="file_path",
+                docstring="method docstring",
+                code_block="def test_method(self):\n    pass",
+            )
+        ],
+    )
+    function_node = TNode(
+        name="test_func",
+        type="function",
+        file_path="file_path",
+        docstring="Function docstring",
+        code_block="def test_func():\n    pass",
+    )
+
+    module.children = [class_node, function_node]
+    root.children = [module]
+
+    reconstruct_source_files(root, tmp_path)
+
+    assert (tmp_path / "testpkg").is_dir()
+    assert (tmp_path / "testpkg" / "__init__.py").is_file()
+    assert (tmp_path / "testpkg" / "module.py").is_file()
+
+    with open(tmp_path / "testpkg" / "module.py", "r", encoding="utf-8") as f:
+        content = f.read()
+        assert "Module docstring" in content
+        assert "Class docstring" in content
+        assert "Function docstring" in content
+        assert "class TestClass:" in content
+        assert "def test_func():" in content
+        assert "method docstring" in content
+        assert "def test_method(self):\n    pass" in content

@@ -121,7 +121,7 @@ class TestAnalyzeCodebase:
     @pytest.fixture
     def mock_api_extractor(self):
         """Mock the extract_package_api function from the API extractor."""
-        with patch("ctxclip.interface.extract_package_api") as mock_extract:
+        with patch("ctxclip.interface.interface.extract_package_api") as mock_extract:
             # Create a mock return value that matches the sample project structure
             mock_extract.return_value = {
                 "modules": {
